@@ -1,1 +1,8 @@
 tqdm
+numpy
+pandas
+gymnasium
+seaborn
+pymc
+pytensor
+arviz
