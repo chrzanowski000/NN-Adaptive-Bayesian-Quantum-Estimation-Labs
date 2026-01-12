@@ -1,6 +1,7 @@
 # model.py
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 class network_CEM(nn.Module):
@@ -36,4 +37,20 @@ class network_CEM(nn.Module):
                 nn.init.zeros_(m.bias)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.net(x)
+        return torch.softplus(self.net(x))
+    
+
+class TimePolicy(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(2, 32),
+            nn.Tanh(),
+            nn.Linear(32, 1)
+        )
+
+    def forward(self, x):
+        # output measurement time t > 0
+        t = F.softplus(self.net(x)) + 1e-3
+        return torch.clamp(t, 0.01, 1000.0)
+    
