@@ -5,31 +5,6 @@ from scipy.special import logsumexp
 from modules.simulation import FIXED_T2
 
 
-# --------------------------------------------------
-# PyMC model
-# --------------------------------------------------
-
-
-def build_model():
-    with pm.Model() as model:
-        omega = pm.Data("omega", np.zeros(1))
-        t     = pm.Data("t", 0.0)
-
-        p0 = (
-            pt.exp(-t / FIXED_T2)
-            * pt.cos(omega * t / 2)**2
-            + (1 - pt.exp(-t / FIXED_T2)) / 2
-        )
-
-        pm.Bernoulli("y", p=p0)
-
-
-    return model, model.compile_logp()
-
-
-# --------------------------------------------------
-# Particles
-# --------------------------------------------------
 
 def init_particles(N):
     particles = np.random.uniform(0.6, 0.8, size=(N, 1))  # omega only
@@ -81,46 +56,7 @@ def smc_step(particles, logw, d, t, model, logp_fn):
 
     return particles, logw
 
-# def smc_update_no_resample(particles, logw, d, t, model, logp_fn):
-#     with model:
-#         pm.set_data({
-#             "omega": particles[:, 0],
-#             "t": float(t)
-#         })
 
-#         y = np.full(len(particles), d)
-#         logp = logp_fn({"y": y})
-#         print("logp std =", np.std(logp),"\n",
-#               "logp: ", logp)
-#     idx = np.argsort(particles[:, 0])
-#     print("omega[:5] =", particles[idx][:5, 0])
-#     print("logp[:5]  =", logp[idx][:5])
-
-#     logp = np.maximum(logp, -1e6)  # likelihood floor
-#     print("\n", "logp: ", logp)
-#     logw = logw + logp
-#     print("\n", "logw ", logw)
-#     logw = logw - logsumexp(logw)  # normalize
-#     print("\n", "logp: ", logw)
-
-#     return particles, logw
-
-
-# def smc_update_no_resample(particles, logw, d, t, model, logp_fn):
-#     omega = particles[:, 0]
-
-#     p0 = (
-#         np.exp(-t / FIXED_T2)
-#         * np.cos(omega * t / 2)**2
-#         + (1 - np.exp(-t / FIXED_T2)) / 2
-#     )
-
-#     logp = pm.logp(pm.Bernoulli.dist(p=p0), d).eval()
-
-#     logw = logw + logp
-#     logw = logw - logsumexp(logw)
-
-#     return particles, logw
 
 def smc_update_no_resample(particles, logw, d, t):
     omega = particles[:, 0]

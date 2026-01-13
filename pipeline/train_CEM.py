@@ -8,24 +8,27 @@ import sys
 
 from modules.algorithms.CEM import CEM
 import models.nn
-from modules.algorithms.seq_montecarlo import build_model, normalize
+from modules.algorithms.seq_montecarlo import normalize
 from modules.rollout import rollout
 from modules.simulation import FIXED_T2
 
 
 
 # ================= CONFIG =================
+POLICY = models.nn.TimePolicy_Fiderer #choose network
 
 N_PARTICLES = 3000
 EPISODE_LEN = 100
-TRUE_OMEGA = 0.7
-
 CEM_POP = 100
 CEM_ELITE_FRAC = 0.15
 CEM_INIT_STD = 1.0
 CEM_GENERATIONS = 100
 HISTORY_SIZE = 30 #size od time array passed to networks (input_dim=HISTORY_SIZE+2)
-POLICY = models.nn.TimePolicy_Fiderer
+RANDOM_SEED=42
+
+np.random.seed(RANDOM_SEED) #seed for omegas generation
+TRUE_OMEGAS_LIST = np.random.uniform(0.0, 1.0, size=CEM_GENERATIONS) #generate list of random omegas
+
 
 # ==========================================
 # print(POLICY.__name__)
@@ -42,17 +45,20 @@ with mlflow.start_run():
         "N_PARTICLES": N_PARTICLES,
         "EPISODE_LEN": EPISODE_LEN,
         "FIXED_T2": FIXED_T2,
-        "TRUE_OMEGA": TRUE_OMEGA,
+        "TRUE_OMEGAS_LIST": TRUE_OMEGAS_LIST,
         "CEM_POP": CEM_POP,
         "CEM_ELITE_FRAC": CEM_ELITE_FRAC,
         "CEM_INIT_STD": CEM_INIT_STD,
         "HISOTRY_SIZE": HISTORY_SIZE ,
         "policy_name": POLICY.__name__,
+        "RANDOM_SEED": RANDOM_SEED,
     })
 
     cem = CEM(POLICY, CEM_POP, CEM_ELITE_FRAC, CEM_INIT_STD, )
 
-    for gen in range(CEM_GENERATIONS):
+    for idx, gen in enumerate(range(CEM_GENERATIONS)):
+        TRUE_OMEGA=TRUE_OMEGAS_LIST[idx]
+        print("TRUE OMEGA: ",TRUE_OMEGA)
         rewards, stats = cem.step(
             rollout_fn=lambda theta: rollout(
                                             cem.policy_model,
@@ -83,6 +89,7 @@ with mlflow.start_run():
         mlflow.log_metric("mean_final_var", mean_final_var, step=gen)
         mlflow.log_metric("mean_ess", mean_ess, step=gen)
         mlflow.log_metric("mean_t", mean_t, step=gen)
+        mlflow.log_metric("true_omega", TRUE_OMEGA, step=gen)
 
 
 

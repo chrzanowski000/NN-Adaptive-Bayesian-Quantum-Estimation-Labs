@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 import re
+import json
 
 from modules.rollout import rollout   # your UPDATED rollout
 
@@ -14,7 +15,7 @@ from modules.rollout import rollout   # your UPDATED rollout
 RUN_ID = "ca446d98c593478e8d58c12b8e0d51c3"
 MODEL_NAME = "policy"
 
-TRUE_OMEGA = 0.7
+TRUE_OMEGA = 0.80
 N_PARTICLES = 3000
 EPISODE_LEN = 120
 HISTORY_SIZE = 30
@@ -77,15 +78,7 @@ info = rollout(
     HISTORY_SIZE=HISTORY_SIZE,
 )
 
-# ============================================================
-# Print summary
-# ============================================================
 
-print("\n=== Episode summary ===")
-print(f"Initial variance : {info['initial_var']:.3e}")
-print(f"Final variance   : {info['final_var']:.3e}")
-print(f"Total reward     : {info['reward']:.3e}")
-print(f"Final ESS        : {info['final_ess']:.1f}")
 
 # ============================================================
 # Extract trajectories
@@ -98,6 +91,54 @@ mean_list = np.array(info["mean_list"])
 
 steps = np.arange(len(t_list))
 
+reward_per_step = np.zeros(len(var_list))
+reward_per_step[1:] = var_list[:-1] - var_list[1:]
+
+
+
+# ============================================================
+# Episode summary
+# ============================================================
+
+
+episode_summary = {
+    # --- identification
+    "run_id": RUN_ID,
+    "model_name": MODEL_NAME,
+
+    # --- experiment configuration
+    "true_omega": TRUE_OMEGA,
+    "n_particles": N_PARTICLES,
+    "episode_len": EPISODE_LEN,
+    "history_size": HISTORY_SIZE,
+
+    # --- results
+    "initial_variance": float(info["initial_var"]),
+    "final_variance": float(info["final_var"]),
+    "total_reward": float(info["reward"]),
+    "final_ess": float(info["final_ess"]),
+
+    # --- prediction
+    "final_posterior_mean": float(mean_list[-1]),
+    "final_posterior_variance": float(var_list[-1]),
+
+    # --- trajectory summaries
+    "mean_t": float(np.mean(t_list)),
+    "min_t": float(np.min(t_list)),
+    "max_t": float(np.max(t_list)),
+}
+
+
+print("\n=== Episode summary ===")
+for k, v in episode_summary.items():
+    print(f"{k:>20s} : {v}")
+
+summary_path = run_dir / "episode_summary.json"
+with open(summary_path, "w") as f:
+    json.dump(episode_summary, f, indent=2)
+
+print(f"\nEpisode summary saved to {summary_path}")
+
 # ============================================================
 # Save raw data
 # ============================================================
@@ -106,6 +147,7 @@ steps = np.arange(len(t_list))
 # np.save(run_dir / "var_list.npy", var_list)
 # np.save(run_dir / "ess_list.npy", ess_list)
 # np.save(run_dir / "mean_list.npy", mean_list)
+# np.save(run_dir / "reward_per_step.npy", reward_per_step)
 
 # ============================================================
 # PLOTS (saved to disk, not shown)
@@ -155,6 +197,16 @@ plt.legend()
 plt.grid(True)
 plt.tight_layout()
 plt.savefig(run_dir / "posterior_mean.png")
+plt.close()
+
+plt.figure(figsize=(6, 4))
+plt.plot(steps, reward_per_step, marker="o")
+plt.xlabel("Episode step")
+plt.ylabel("Reward (variance reduction)")
+plt.title("Reward vs episode step")
+plt.grid(True)
+plt.tight_layout()
+plt.savefig(run_dir / "reward_vs_step.png")
 plt.close()
 
 print(f"\nAll figures and data saved to {run_dir}")
