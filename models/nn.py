@@ -40,7 +40,7 @@ class network_CEM(nn.Module):
         return torch.softplus(self.net(x))
     
 
-class TimePolicy(nn.Module):
+class TimePolicy(nn.Module): #change to network form Fiderer
     def __init__(self, history_len=5):
         super().__init__()
         self.history_len = history_len
@@ -54,6 +54,27 @@ class TimePolicy(nn.Module):
             nn.Linear(64, 64),
             nn.Tanh(),
             nn.Linear(64, 1),
+        )
+
+    def forward(self, x):
+        z = self.net(x)
+        t = self.t_min + (self.t_max - self.t_min) * torch.sigmoid(z)
+        return t
+    
+
+class TimePolicy_0(nn.Module): #change to network form Fiderer
+    def __init__(self, history_len=5):
+        super().__init__()
+        self.history_len = history_len
+        input_dim = 2 + history_len   # μ, σ + historia t
+        self.t_min = 0.1      # lower informative bound
+        self.t_max = 3000.0     # coherence-scale upper bound
+        hidden_dim = 50
+
+        self.net = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.Tanh(),
+            nn.Linear(hidden_dim, 1),
         )
 
     def forward(self, x):

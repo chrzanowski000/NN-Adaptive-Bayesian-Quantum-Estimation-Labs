@@ -10,22 +10,22 @@ from collections import deque
 
 
 def rollout(
+    policy,
     theta,
     TRUE_OMEGA,
     N_PARTICLES,
     EPISODE_LEN,
-    return_particles=False,
+    HISTORY_SIZE,
     ):
-
-    t_history_len=5
+    t_history_len=HISTORY_SIZE
     t_history = deque(maxlen=t_history_len)
     for _ in range(t_history_len):
         t_history.append(0.0) #change to uniform
-    policy = TimePolicy()
 
     idx = 0
     for p in policy.parameters():
         n = p.numel()
+        #print("dim in policy parameters: ", n, "\n")
         p.data.copy_(theta[idx:idx+n].view_as(p))
         idx += n
 

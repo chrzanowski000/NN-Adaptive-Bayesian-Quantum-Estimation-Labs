@@ -6,7 +6,7 @@ import os
 import numpy as np
 
 from modules.algorithms.CEM import CEM
-from models.nn import TimePolicy
+from models.nn import TimePolicy, TimePolicy_0
 from modules.algorithms.seq_montecarlo import build_model, normalize
 from modules.rollout import rollout
 from modules.simulation import FIXED_T2
@@ -15,28 +15,22 @@ from modules.simulation import FIXED_T2
 
 # ================= CONFIG =================
 
-N_PARTICLES = 1000
+N_PARTICLES = 3000
 EPISODE_LEN = 100
 TRUE_OMEGA = 0.7
 
 CEM_POP = 100
-CEM_ELITE_FRAC = 0.1
+CEM_ELITE_FRAC = 0.15
 CEM_INIT_STD = 1.0
 CEM_GENERATIONS = 100
-WINDOW_SIZE = 32 #size od time array passed to networks + mu and sigma so 30+2
+HISTORY_SIZE = 30 #size od time array passed to networks (input_dim=HISTORY_SIZE+2)
+POLICY = TimePolicy_0
 
 # ==========================================
 
 mlflow.set_experiment("cem_qubit_omega_only")
+os.makedirs("artifacts", exist_ok=True) #create folder for artifacts
 
-# model, logp_fn = build_model()
-
-### temporary curvature check
-# omega = np.linspace(0,1,500)
-# t=1
-# p0 = np.exp(-t/FIXED_T2)*np.cos(omega*t/2)**2 + (1-np.exp(-t/FIXED_T2))/2
-# plt.plot(omega, p0)
-# plt.savefig("artifacts/model.png")
 
 
 with mlflow.start_run():
@@ -49,19 +43,21 @@ with mlflow.start_run():
         "CEM_POP": CEM_POP,
         "CEM_ELITE_FRAC": CEM_ELITE_FRAC,
         "CEM_INIT_STD": CEM_INIT_STD,
-        "WINDOW_SIZE": WINDOW_SIZE
+        "HISOTRY_SIZE": HISTORY_SIZE ,
+        "policy_name": POLICY.__class__.__name__,
     })
 
-    cem = CEM(TimePolicy, CEM_POP, CEM_ELITE_FRAC, CEM_INIT_STD)
+    cem = CEM(POLICY, CEM_POP, CEM_ELITE_FRAC, CEM_INIT_STD, )
 
     for gen in range(CEM_GENERATIONS):
         rewards, stats = cem.step(
             rollout_fn=lambda theta: rollout(
+                                            cem.policy_model,
                                             theta,
                                             TRUE_OMEGA,
                                             N_PARTICLES,
                                             EPISODE_LEN,
-                                            return_particles=False,#remove
+                                            HISTORY_SIZE
             ),
             debug=True
         )
@@ -93,12 +89,12 @@ with mlflow.start_run():
 
         # ---- posterior histogram (best policy) ---- #perhaps should be removed i dont know how it interfers exactly
         info = rollout(
+            cem.policy_model,
             cem.mu,
             TRUE_OMEGA,
             N_PARTICLES,
             EPISODE_LEN,
-            return_particles=True, #remove
-     
+            HISTORY_SIZE
         )
 
 
@@ -133,8 +129,11 @@ with mlflow.start_run():
 
         print(f"gen {gen:02d} | mean R = {mean_r:.3e} | max R = {max_r:.3e}")
 
+
+
+
     # ---- save final policy ---- #i thing it does something wrong #to correct later
-    final_policy = TimePolicy()
+    final_policy = cem.policy_model
     idx = 0
     for p in final_policy.parameters():
         n = p.numel()

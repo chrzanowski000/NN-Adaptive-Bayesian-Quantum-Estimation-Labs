@@ -6,17 +6,19 @@ from utils.network_fill import fill_policy_gaussian
 
 
 class CEM:
-    def __init__(self, policy_cls, pop_size=40, elite_frac=0.2, init_std=1.0):
-        dummy = policy_cls()
+    def __init__(self, policy_cls, pop_size=40, elite_frac=0.2, init_std=1.0, history_size=30):
+        dummy = policy_cls(history_size)
+        
         self.dim = sum(p.numel() for p in dummy.parameters())
-        print("dimesnion of parameters: ",self.dim)
+        print("dimesnion of parameters in theta: ",self.dim)
+        print([p.numel() for p in dummy.parameters()], "\n")
 
         self.mu = torch.zeros(self.dim)
         self.sigma = torch.ones(self.dim) * init_std
 
         self.pop = pop_size
         self.elite = int(pop_size * elite_frac)
-        self.policy_cls = policy_cls
+        self.policy_model = policy_cls(history_size)
 
 
 
