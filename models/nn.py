@@ -62,7 +62,7 @@ class TimePolicy(nn.Module): #change to network form Fiderer
         return t
     
 
-class TimePolicy_0(nn.Module): #change to network form Fiderer
+class TimePolicy_Fiderer(nn.Module): #orginal network from fiderer
     def __init__(self, history_len=5):
         super().__init__()
         self.history_len = history_len

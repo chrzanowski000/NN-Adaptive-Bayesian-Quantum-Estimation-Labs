@@ -1,8 +1,4 @@
 import torch
-import numpy as np
-from models.nn import TimePolicy
-from modules.simulation import measure
-from utils.network_fill import fill_policy_gaussian
 
 
 class CEM:
@@ -11,7 +7,7 @@ class CEM:
         
         self.dim = sum(p.numel() for p in dummy.parameters())
         print("dimesnion of parameters in theta: ",self.dim)
-        print([p.numel() for p in dummy.parameters()], "\n")
+        print("layers dimensions: \n",[p.numel() for p in dummy.parameters()], "\n")
 
         self.mu = torch.zeros(self.dim)
         self.sigma = torch.ones(self.dim) * init_std
@@ -23,7 +19,7 @@ class CEM:
 
 
     def sample(self):
-        return self.mu + self.sigma * torch.randn(self.pop, self.dim) #zmienić coś tyu nie tak
+        return self.mu + self.sigma * torch.randn(self.pop, self.dim)
 
     def update(self, thetas, rewards):
         elite_idx = torch.topk(torch.tensor(rewards), self.elite).indices
@@ -31,12 +27,6 @@ class CEM:
         self.mu = elite.mean(0)
         self.sigma = elite.std(0) + 1e-8
 
-    # def step(self, rollout_fn):
-    #     thetas = self.sample()
-    #     rewards = [rollout_fn(theta) for theta in thetas]
-        
-    #     self.update(thetas, rewards)
-    #     return np.mean(rewards), np.max(rewards)
 
     def step(self, rollout_fn, debug=False):
         thetas = self.sample()

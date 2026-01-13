@@ -4,9 +4,10 @@ import torch
 import matplotlib.pyplot as plt
 import os
 import numpy as np
+import sys
 
 from modules.algorithms.CEM import CEM
-from models.nn import TimePolicy, TimePolicy_0
+import models.nn
 from modules.algorithms.seq_montecarlo import build_model, normalize
 from modules.rollout import rollout
 from modules.simulation import FIXED_T2
@@ -24,9 +25,11 @@ CEM_ELITE_FRAC = 0.15
 CEM_INIT_STD = 1.0
 CEM_GENERATIONS = 100
 HISTORY_SIZE = 30 #size od time array passed to networks (input_dim=HISTORY_SIZE+2)
-POLICY = TimePolicy_0
+POLICY = models.nn.TimePolicy_Fiderer
 
 # ==========================================
+# print(POLICY.__name__)
+# sys.exit(0)
 
 mlflow.set_experiment("cem_qubit_omega_only")
 os.makedirs("artifacts", exist_ok=True) #create folder for artifacts
@@ -44,7 +47,7 @@ with mlflow.start_run():
         "CEM_ELITE_FRAC": CEM_ELITE_FRAC,
         "CEM_INIT_STD": CEM_INIT_STD,
         "HISOTRY_SIZE": HISTORY_SIZE ,
-        "policy_name": POLICY.__class__.__name__,
+        "policy_name": POLICY.__name__,
     })
 
     cem = CEM(POLICY, CEM_POP, CEM_ELITE_FRAC, CEM_INIT_STD, )
