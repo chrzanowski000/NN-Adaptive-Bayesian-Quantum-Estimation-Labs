@@ -15,14 +15,14 @@ from modules.simulation import FIXED_T2
 
 # ================= CONFIG =================
 
-N_PARTICLES = 2000
+N_PARTICLES = 3000
 EPISODE_LEN = 100
 TRUE_OMEGA = 0.7
 
 CEM_POP = 100
 CEM_ELITE_FRAC = 0.1
 CEM_INIT_STD = 1.0
-CEM_GENERATIONS = 20
+CEM_GENERATIONS = 100
 WINDOW_SIZE = 32 #size od time array passed to networks + mu and sigma so 30+2
 
 # ==========================================
@@ -30,6 +30,14 @@ WINDOW_SIZE = 32 #size od time array passed to networks + mu and sigma so 30+2
 mlflow.set_experiment("cem_qubit_omega_only")
 
 model, logp_fn = build_model()
+
+### temporary curvature check
+# omega = np.linspace(0,1,500)
+# t=1
+# p0 = np.exp(-t/FIXED_T2)*np.cos(omega*t/2)**2 + (1-np.exp(-t/FIXED_T2))/2
+# plt.plot(omega, p0)
+# plt.savefig("artifacts/model.png")
+
 
 with mlflow.start_run():
 

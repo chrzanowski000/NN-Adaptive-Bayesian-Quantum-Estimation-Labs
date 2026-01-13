@@ -41,10 +41,12 @@ class network_CEM(nn.Module):
     
 
 class TimePolicy(nn.Module):
-    def __init__(self, history_len=30):
+    def __init__(self, history_len=5):
         super().__init__()
         self.history_len = history_len
         input_dim = 2 + history_len   # μ, σ + historia t
+        self.t_min = 0.1      # lower informative bound
+        self.t_max = 3000.0     # coherence-scale upper bound
 
         self.net = nn.Sequential(
             nn.Linear(input_dim, 64),
@@ -55,6 +57,6 @@ class TimePolicy(nn.Module):
         )
 
     def forward(self, x):
-        t = F.softplus(self.net(x)) + 1e-3
-        # t=torch.clamp(t, 0.05, 10.0)
+        z = self.net(x)
+        t = self.t_min + (self.t_max - self.t_min) * torch.sigmoid(z)
         return t

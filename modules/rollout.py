@@ -19,8 +19,9 @@ def rollout(
     return_particles=False,
     ):
 
-    t_history = deque(maxlen=30)
-    for _ in range(30):
+    t_history_len=5
+    t_history = deque(maxlen=t_history_len)
+    for _ in range(t_history_len):
         t_history.append(0.0) #change to uniform
     policy = TimePolicy()
 
@@ -47,13 +48,15 @@ def rollout(
                             )
         t = policy(state).item()
         t_history.append(t)
-
         d = measure(TRUE_OMEGA, t)
-
+        #print(d)
+        # print(particles, logw, d, t, model, logp_fn)
 
         particles, logw = smc_update_no_resample( #there is a problem SMC is not updating
             particles, logw, d, t, model, logp_fn
         )
+        #print(particles)
+        #print(logw)
 
         if ess(logw) < 0.8 * len(logw):
             particles, logw = resample(particles, logw)
