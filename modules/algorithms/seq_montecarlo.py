@@ -9,6 +9,7 @@ from modules.simulation import FIXED_T2
 # PyMC model
 # --------------------------------------------------
 
+
 def build_model():
     with pm.Model() as model:
         omega = pm.Data("omega", [])

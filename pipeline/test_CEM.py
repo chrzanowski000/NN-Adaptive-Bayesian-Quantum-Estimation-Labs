@@ -8,6 +8,7 @@ from models.nn import TimePolicy
 from modules.algorithms.seq_montecarlo import build_model, normalize
 from modules.rollout import rollout
 from modules.simulation import FIXED_T2
+from utils.network_fill import fill_policy_gaussian
 
 # ================= CONFIG =================
 
@@ -15,10 +16,11 @@ N_PARTICLES = 3000
 EPISODE_LEN = 100
 TRUE_OMEGA = 0.7
 
-CEM_POP = 40
-CEM_ELITE_FRAC = 0.2
+CEM_POP = 100
+CEM_ELITE_FRAC = 0.1
 CEM_INIT_STD = 1.0
 CEM_GENERATIONS = 20
+WINDOW_SIZE = 32 #size od time array passed to networks + mu and sigma so 30+2
 
 # ==========================================
 
@@ -36,11 +38,13 @@ with mlflow.start_run():
         "CEM_POP": CEM_POP,
         "CEM_ELITE_FRAC": CEM_ELITE_FRAC,
         "CEM_INIT_STD": CEM_INIT_STD,
+        "WINDOW_SIZE": WINDOW_SIZE
     })
 
     cem = CEM(TimePolicy, CEM_POP, CEM_ELITE_FRAC, CEM_INIT_STD)
 
     for gen in range(CEM_GENERATIONS):
+        fill_policy_gaussian(cem.policy_cls)
         mean_r, max_r = cem.step(
             lambda theta: rollout(
                 theta,
@@ -58,7 +62,7 @@ with mlflow.start_run():
         mlflow.log_metric("sigma_mean", cem.sigma.mean().item(), step=gen)
         mlflow.log_metric("mu_norm", torch.norm(cem.mu).item(), step=gen)
 
-        # ---- posterior histogram (best policy) ----
+        # ---- posterior histogram (best policy) ---- #perhaps should be removed i dont know how it interfers exactly
         _, particles, logw = rollout(
             cem.mu,
             model,
@@ -85,14 +89,14 @@ with mlflow.start_run():
         plt.legend()
 
         fname = f"posterior_gen_{gen:03d}.png"
-        plt.savefig(fname)
+        #plt.savefig(fname)
         plt.close()
 
         mlflow.log_artifact(fname)
 
         print(f"gen {gen:02d} | mean R = {mean_r:.3e} | max R = {max_r:.3e}")
 
-    # ---- save final policy ----
+    # ---- save final policy ---- #i thing it does something wrong #to correct later
     final_policy = TimePolicy()
     idx = 0
     for p in final_policy.parameters():

@@ -2,6 +2,7 @@ import torch
 import numpy as np
 from models.nn import TimePolicy
 from modules.simulation import measure
+from utils.network_fill import fill_policy_gaussian
 
 
 class CEM:
@@ -15,9 +16,12 @@ class CEM:
         self.pop = pop_size
         self.elite = int(pop_size * elite_frac)
         self.policy_cls = policy_cls
+        fill_policy_gaussian(self.policy_cls)
+
+
 
     def sample(self):
-        return self.mu + self.sigma * torch.randn(self.pop, self.dim)
+        return self.mu + self.sigma * torch.randn(self.pop, self.dim) #zmienić coś tyu nie tak
 
     def update(self, thetas, rewards):
         elite_idx = torch.topk(torch.tensor(rewards), self.elite).indices

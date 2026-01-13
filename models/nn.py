@@ -41,16 +41,20 @@ class network_CEM(nn.Module):
     
 
 class TimePolicy(nn.Module):
-    def __init__(self):
+    def __init__(self, history_len=30):
         super().__init__()
+        self.history_len = history_len
+        input_dim = 2 + history_len   # μ, σ + historia t
+
         self.net = nn.Sequential(
-            nn.Linear(2, 32),
+            nn.Linear(input_dim, 64),
             nn.Tanh(),
-            nn.Linear(32, 1)
+            nn.Linear(64, 64),
+            nn.Tanh(),
+            nn.Linear(64, 1),
         )
 
     def forward(self, x):
-        # output measurement time t > 0
         t = F.softplus(self.net(x)) + 1e-3
-        return torch.clamp(t, 0.01, 1000.0)
-    
+        # t=torch.clamp(t, 0.05, 10.0)
+        return t
