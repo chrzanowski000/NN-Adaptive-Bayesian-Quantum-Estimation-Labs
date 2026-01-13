@@ -74,7 +74,7 @@ def rollout(
     info = {
         "initial_var": initial_var,
         "final_var": final_var,
-        "reward":  final_var - initial_var,
+        "reward": initial_var - final_var,
         "final_ess": ess(logw),
         "logw": logw,
         "mean_t": float(np.mean(t_history)),
