@@ -214,3 +214,6 @@ mlflow.db
 mlruns/*
 logs/*
 artifacts/*
+
+#Validation
+validation/*

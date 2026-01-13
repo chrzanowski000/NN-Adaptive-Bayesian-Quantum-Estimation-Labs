@@ -32,6 +32,14 @@ def rollout(
     particles, logw = init_particles(N_PARTICLES)
     initial_var = posterior_variance(particles, logw)
 
+
+
+    # --- storage of episode parameters
+    t_list = []
+    var_list = []
+    ess_list = []
+    mean_list = []
+
     for _ in range(EPISODE_LEN):
         w = np.exp(logw - np.max(logw))
         w /= w.sum()
@@ -39,12 +47,17 @@ def rollout(
         mean = np.sum(w * particles[:, 0])
         var = np.sum(w * (particles[:, 0] - mean) ** 2)
 
+        mean_list.append(mean)
+        var_list.append(var)
+        ess_list.append(ess(logw))
+
 
         state = torch.tensor(
                             [mean, var] + list(t_history),
                             dtype=torch.float32
                             )
         t = policy(state).item()
+        t_list.append(t)
         t_history.append(t)
         d = measure(TRUE_OMEGA, t)
 
@@ -65,7 +78,13 @@ def rollout(
         "final_ess": ess(logw),
         "logw": logw,
         "mean_t": float(np.mean(t_history)),
-        "particles": particles
+        "particles": particles,
+
+        # ---- trajectories per episode
+        "t_list": t_list,
+        "var_list": var_list,
+        "ess_list": ess_list,
+        "mean_list": mean_list,
     }
 
     return info
