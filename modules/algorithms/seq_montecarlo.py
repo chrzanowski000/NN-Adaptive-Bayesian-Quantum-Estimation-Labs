@@ -7,7 +7,7 @@ from modules.simulation import FIXED_T2
 
 
 def init_particles(N):
-    particles = np.random.uniform(0.6, 0.8, size=(N, 1))  # omega only
+    particles = np.random.uniform(0, 1, size=(N, 1))  # omega only
     logw = -np.log(N) * np.ones(N)
     return particles, logw
 
