@@ -213,7 +213,7 @@ __marimo__/
 mlflow.db
 mlruns/*
 logs/*
-artifacts/*
+artifacts/
 
 #Validation
-validation/*
+validation/
