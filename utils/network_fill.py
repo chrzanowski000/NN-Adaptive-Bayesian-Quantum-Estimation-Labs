@@ -1,7 +1,7 @@
 import torch
 import torch.nn.init as init
 
-def fill_policy_gaussian(policy, mu, sigma):
+def fill_policy_gaussian(policy, mu=0, sigma=1):
     """
     Fill all parameters of a policy network with samples
     from N(mu, sigma^2).

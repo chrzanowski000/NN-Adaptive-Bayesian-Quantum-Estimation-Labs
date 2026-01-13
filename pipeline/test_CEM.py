@@ -2,17 +2,17 @@ import mlflow
 import mlflow.pytorch
 import torch
 import matplotlib.pyplot as plt
+import os
 
 from modules.algorithms.CEM import CEM
 from models.nn import TimePolicy
 from modules.algorithms.seq_montecarlo import build_model, normalize
 from modules.rollout import rollout
 from modules.simulation import FIXED_T2
-from utils.network_fill import fill_policy_gaussian
 
 # ================= CONFIG =================
 
-N_PARTICLES = 3000
+N_PARTICLES = 2000
 EPISODE_LEN = 100
 TRUE_OMEGA = 0.7
 
@@ -44,7 +44,6 @@ with mlflow.start_run():
     cem = CEM(TimePolicy, CEM_POP, CEM_ELITE_FRAC, CEM_INIT_STD)
 
     for gen in range(CEM_GENERATIONS):
-        fill_policy_gaussian(cem.policy_cls)
         mean_r, max_r = cem.step(
             lambda theta: rollout(
                 theta,
@@ -53,6 +52,7 @@ with mlflow.start_run():
                 TRUE_OMEGA,
                 N_PARTICLES,
                 EPISODE_LEN,
+                return_particles=False
             )
         )
 
@@ -73,6 +73,10 @@ with mlflow.start_run():
             return_particles=True,
         )
 
+
+        ###
+        #PLOTS
+        ###
         w = normalize(logw)
 
         plt.figure(figsize=(6, 4))
@@ -89,10 +93,10 @@ with mlflow.start_run():
         plt.legend()
 
         fname = f"posterior_gen_{gen:03d}.png"
-        #plt.savefig(fname)
+        plt.savefig(os.path.join("artifacts",fname))
         plt.close()
 
-        mlflow.log_artifact(fname)
+        mlflow.log_artifact(os.path.join("artifacts",fname))
 
         print(f"gen {gen:02d} | mean R = {mean_r:.3e} | max R = {max_r:.3e}")
 

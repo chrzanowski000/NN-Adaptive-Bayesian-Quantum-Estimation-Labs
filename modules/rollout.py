@@ -69,4 +69,4 @@ def rollout(
     if return_particles:
         return reward, particles, logw
 
-    return reward
+    return reward#, initial_var, final_var

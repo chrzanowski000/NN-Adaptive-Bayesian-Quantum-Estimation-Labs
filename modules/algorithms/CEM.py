@@ -16,7 +16,6 @@ class CEM:
         self.pop = pop_size
         self.elite = int(pop_size * elite_frac)
         self.policy_cls = policy_cls
-        fill_policy_gaussian(self.policy_cls)
 
 
 
@@ -28,6 +27,8 @@ class CEM:
         elite = thetas[elite_idx]
         self.mu = elite.mean(0)
         self.sigma = elite.std(0) + 1e-8
+        print(self.mu)
+        print(self.sigma)
 
     def step(self, rollout_fn):
         thetas = self.sample()
