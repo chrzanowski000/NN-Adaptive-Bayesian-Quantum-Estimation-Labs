@@ -17,13 +17,11 @@ MODEL_NAME = "policy"
 
 TRUE_OMEGA = 0.2
 N_PARTICLES = 3000
-EPISODE_LEN = 120
+EPISODE_LEN = 125
 HISTORY_SIZE = 30
-N_OMEGAS = 10
+N_OMEGAS = 10000
 
 TRUE_OMEGAS_LIST = np.random.uniform(0.0, 1.0, size=N_OMEGAS) #generate list of random omegas
-TRUE_OMEGAS_LIST = np.random.uniform(0.0, 1.0, size=N_OMEGAS) #generate list of random omegas
-
 # ============================================================
 # Utility: create validation/run{idx}/
 # ============================================================
@@ -70,40 +68,45 @@ run_dir, run_idx = get_next_run_dir("validation")
 print(f"Saving inference results to: {run_dir}")
 
 # ============================================================
-# Run ONE adaptive experiment (ONE rollout)
+# Run ONE adaptive experiment (MANY rollout)
 # ============================================================
+var_list_N=np.zeros((EPISODE_LEN,1))
+for idx, TRUE_OMEGA in enumerate(TRUE_OMEGAS_LIST):
+    #print(TRUE_OMEGA)
+    print("\nidx: ",idx)
+    info = rollout(
+        policy=policy,
+        theta=theta,
+        TRUE_OMEGA=TRUE_OMEGA,
+        N_PARTICLES=N_PARTICLES,
+        EPISODE_LEN=EPISODE_LEN,
+        HISTORY_SIZE=HISTORY_SIZE,
+    )
 
-info = rollout(
-    policy=policy,
-    theta=theta,
-    TRUE_OMEGA=TRUE_OMEGA,
-    N_PARTICLES=N_PARTICLES,
-    EPISODE_LEN=EPISODE_LEN,
-    HISTORY_SIZE=HISTORY_SIZE,
-)
 
 
+    # ============================================================
+    # Extract trajectories
+    # ============================================================
 
-# ============================================================
-# Extract trajectories
-# ============================================================
+    t_list    = np.array(info["t_list"])
+    var_list  = np.array(info["var_list"])
+    ess_list  = np.array(info["ess_list"])
+    mean_list = np.array(info["mean_list"])
 
-t_list    = np.array(info["t_list"])
-var_list  = np.array(info["var_list"])
-ess_list  = np.array(info["ess_list"])
-mean_list = np.array(info["mean_list"])
-
-steps = np.arange(len(t_list))
-
-reward_per_step = np.zeros(len(var_list))
-reward_per_step[1:] = var_list[:-1] - var_list[1:]
-
+    steps = np.arange(len(t_list))
+    reward_per_step = np.zeros(len(var_list))
+    reward_per_step[1:] = var_list[:-1] - var_list[1:]
+    var_list=var_list.reshape(-1,1)
+    var_list_N=np.append(var_list_N, var_list, axis=1)
 
 
 # ============================================================
 # Episode summary
 # ============================================================
 
+print(var_list_N.shape)
+var_list_N_mean = np.mean(var_list_N, axis=1)
 
 episode_summary = {
     # --- identification
@@ -166,6 +169,17 @@ plt.title("Adaptive policy: predicted t during episode")
 plt.grid(True)
 plt.tight_layout()
 plt.savefig(run_dir / "predicted_t.png")
+plt.close()
+
+# ---- Posterior variance
+plt.figure(figsize=(6, 4))
+plt.plot(steps, var_list_N_mean, marker="o")
+plt.xlabel("Step")
+plt.ylabel(f"Posterior variance over {N_OMEGAS} omegas")
+plt.title("Posterior collapse during experiment")
+plt.grid(True)
+plt.tight_layout()
+plt.savefig(run_dir / "posterior_variance_over_omega.png")
 plt.close()
 
 # ---- Posterior variance

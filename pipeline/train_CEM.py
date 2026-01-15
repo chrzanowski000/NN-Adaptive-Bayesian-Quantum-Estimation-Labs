@@ -17,8 +17,8 @@ from utils.git_utils.git import get_git_branch, get_git_commit, git_is_dirty
 
 
 # ================= CONFIG =================
-#POLICY = models.nn.TimePolicy_Fiderer #choose network
-POLICY = models.nn.TimePolicy_1
+POLICY = models.nn.TimePolicy_Fiderer #choose network
+#POLICY = models.nn.TimePolicy_1
 
 N_PARTICLES = 2000
 EPISODE_LEN = 100
@@ -26,7 +26,7 @@ CEM_POP = 1000
 CEM_ELITE_FRAC = 0.1
 CEM_INIT_STD = 1.0
 CEM_GENERATIONS = 100
-HISTORY_SIZE = 30 #size od time array passed to networks (input_dim=HISTORY_SIZE+2)
+HISTORY_SIZE = 50 #size od time array passed to networks (input_dim=HISTORY_SIZE+2)
 RANDOM_SEED=42
 
 np.random.seed(RANDOM_SEED) #seed for omegas generation
@@ -67,7 +67,7 @@ with mlflow.start_run():
 
     })
 
-    cem = CEM(POLICY, CEM_POP, CEM_ELITE_FRAC, CEM_INIT_STD, )
+    cem = CEM(POLICY, CEM_POP, CEM_ELITE_FRAC, CEM_INIT_STD, HISTORY_SIZE)
 
     for idx, gen in enumerate(range(CEM_GENERATIONS)):
         TRUE_OMEGA=TRUE_OMEGAS_LIST[idx]
