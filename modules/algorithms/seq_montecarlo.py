@@ -31,7 +31,48 @@ def resample(particles, logw):
     logw = -np.log(len(w)) * np.ones(len(w))
     return particles, logw
 
+def resample_liu_west(particles, logw, a=0.98):
+    """
+    Liu–West resampling.
 
+    Args:
+        particles : (N, D) array
+        logw      : (N,) log weights
+        a         : shrinkage parameter (0 < a < 1)
+
+    Returns:
+        new_particles, new_logw
+    """
+    N, D = particles.shape
+
+    # normalize weights
+    w = np.exp(logw - logsumexp(logw))
+
+    # weighted mean
+    mean = np.sum(w[:, None] * particles, axis=0)
+
+    # weighted covariance
+    diff = particles - mean
+    cov = (w[:, None] * diff).T @ diff
+
+    # shrinkage noise scale
+    h2 = 1.0 - a**2
+    chol = np.linalg.cholesky(h2 * cov + 1e-12 * np.eye(D))
+
+    # resample indices
+    idx = np.random.choice(N, size=N, p=w)
+
+    # Liu–West update
+    new_particles = (
+        a * particles[idx]
+        + (1 - a) * mean
+        + np.random.randn(N, D) @ chol.T
+    )
+
+    # reset weights
+    new_logw = -np.log(N) * np.ones(N)
+
+    return new_particles, new_logw
 # --------------------------------------------------
 # One SMC update
 # --------------------------------------------------

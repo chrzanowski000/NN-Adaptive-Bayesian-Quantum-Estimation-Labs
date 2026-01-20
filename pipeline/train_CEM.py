@@ -22,10 +22,10 @@ POLICY = models.nn.TimePolicy_Fiderer #choose network
 
 N_PARTICLES = 2000
 EPISODE_LEN = 100
-CEM_POP = 1000
+CEM_POP = 100
 CEM_ELITE_FRAC = 0.1
 CEM_INIT_STD = 1.0
-CEM_GENERATIONS = 100
+CEM_GENERATIONS = 2
 HISTORY_SIZE = 50 #size od time array passed to networks (input_dim=HISTORY_SIZE+2)
 RANDOM_SEED=42
 

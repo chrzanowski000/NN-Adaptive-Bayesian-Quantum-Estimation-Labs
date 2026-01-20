@@ -2,7 +2,7 @@ import numpy as np
 import torch
 
 from modules.simulation import measure
-from modules.algorithms.seq_montecarlo import init_particles, smc_update_no_resample, ess, resample
+from modules.algorithms.seq_montecarlo import init_particles, smc_update_no_resample, ess, resample, resample_liu_west
 from modules.rewards import variance_reduction_reward, posterior_variance
 from collections import deque
 
@@ -64,7 +64,7 @@ def rollout(
             particles, logw, d, t
         )
         if ess(logw) < 0.75 * len(logw):
-            particles, logw = resample(particles, logw)
+            particles, logw = resample_liu_west(particles, logw)
             
 
     final_var = posterior_variance(particles, logw)
