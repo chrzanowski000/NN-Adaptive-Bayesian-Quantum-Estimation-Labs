@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import os
 import numpy as np
 import sys
+from tqdm import tqdm
 
 from modules.algorithms.CEM import CEM
 import models.nn
@@ -18,8 +19,8 @@ from utils.git_utils.git import get_git_branch, get_git_commit, git_is_dirty
 
 # ================= CONFIG =================
 POLICY = models.nn.TimePolicy_Fiderer #choose network
-RESAMPLE_FN = resample_liu_west
-#RESAMPLE_FN = resample
+#RESAMPLE_FN = resample_liu_west
+RESAMPLE_FN = resample
 #POLICY = models.nn.TimePolicy_1
 
 N_PARTICLES = 2000
@@ -72,17 +73,18 @@ with mlflow.start_run():
 
     cem = CEM(POLICY, CEM_POP, CEM_ELITE_FRAC, CEM_INIT_STD, HISTORY_SIZE)
 
-    for idx, gen in enumerate(range(CEM_GENERATIONS)):
-        TRUE_OMEGA=TRUE_OMEGAS_LIST[idx]
-        print("TRUE OMEGA: ",TRUE_OMEGA)
+    for gen in tqdm(range(CEM_GENERATIONS)):
+        TRUE_OMEGA=TRUE_OMEGAS_LIST[gen]
+        #print("TRUE OMEGA: ",TRUE_OMEGA)
         rewards, stats = cem.step(
             rollout_fn=lambda theta: rollout(
                                             cem.policy_model,
+                                            RESAMPLE_FN,
                                             theta,
                                             TRUE_OMEGA,
                                             N_PARTICLES,
                                             EPISODE_LEN,
-                                            HISTORY_SIZE
+                                            HISTORY_SIZE,
             ),
             debug=True
         )
@@ -108,52 +110,53 @@ with mlflow.start_run():
         mlflow.log_metric("true_omega", TRUE_OMEGA, step=gen)
 
 
+        if gen % 5==0:
+            ###----
+            #TEST RUN
+            ###----
 
-        ###----
-        #TEST RUN
-        ###----
-
-        # ---- posterior histogram (best policy) ---- #perhaps should be removed i dont know how it interfers exactly
-        info = rollout(
-            cem.policy_model,
-            cem.mu,
-            TRUE_OMEGA,
-            N_PARTICLES,
-            EPISODE_LEN,
-            HISTORY_SIZE
-        )
+            # ---- posterior histogram (best policy) ---- #perhaps should be removed i dont know how it interfers exactly
+            info = rollout(
+                cem.policy_model,
+                RESAMPLE_FN,
+                cem.mu,
+                TRUE_OMEGA,
+                N_PARTICLES,
+                EPISODE_LEN,
+                HISTORY_SIZE
+            )
 
 
 
-        
-        ### get metrics fror histograms
-        logw = info["logw"]
-        particles = info["particles"]
-        ###
-        #PLOTS
-        ###
-        w = normalize(logw)
+            
+            ### get metrics fror histograms
+            logw = info["logw"]
+            particles = info["particles"]
+            ###
+            #PLOTS
+            ###
+            w = normalize(logw)
 
-        plt.figure(figsize=(6, 4))
-        plt.hist(
-            particles[:, 0],
-            weights=w,
-            bins=50,
-            density=True,
-        )
-        plt.axvline(TRUE_OMEGA, color="red", linestyle="--", label="true ω")
-        plt.xlabel("ω")
-        plt.ylabel("posterior density")
-        plt.title(f"Posterior (gen {gen})")
-        plt.legend()
+            plt.figure(figsize=(6, 4))
+            plt.hist(
+                particles[:, 0],
+                weights=w,
+                bins=50,
+                density=True,
+            )
+            plt.axvline(TRUE_OMEGA, color="red", linestyle="--", label="true ω")
+            plt.xlabel("ω")
+            plt.ylabel("posterior density")
+            plt.title(f"Posterior (gen {gen})")
+            plt.legend()
 
-        fname = f"posterior_gen_{gen:03d}.png"
-        plt.savefig(os.path.join("artifacts",fname))
-        plt.close()
+            fname = f"posterior_gen_{gen:03d}.png"
+            plt.savefig(os.path.join("artifacts",fname))
+            plt.close()
 
-        mlflow.log_artifact(os.path.join("artifacts",fname))
+            mlflow.log_artifact(os.path.join("artifacts",fname))
 
-        print(f"gen {gen:02d} | mean R = {mean_r:.3e} | max R = {max_r:.3e}")
+            #print(f"gen {gen:02d} | mean R = {mean_r:.3e} | max R = {max_r:.3e}")
 
 
 

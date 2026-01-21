@@ -8,7 +8,7 @@ import json
 from tqdm import tqdm
 
 from modules.rollout import rollout   # your UPDATED rollout
-from modules.algorithms.seq_montecarlo import resample_liu_west
+from modules.algorithms.seq_montecarlo import resample_liu_west, resample
 
 # ============================================================
 # CONFIG
@@ -16,7 +16,7 @@ from modules.algorithms.seq_montecarlo import resample_liu_west
 
 RUN_ID = "183e23649aae445b9453d434bce20046"
 MODEL_NAME = "policy"
-RESAMPLE_FN=resample_liu_west
+RESAMPLE_FN=resample
 
 TRUE_OMEGA = 0.2
 N_PARTICLES = 3000
