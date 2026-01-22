@@ -19,8 +19,8 @@ from utils.git_utils.git import get_git_branch, get_git_commit, git_is_dirty
 
 # ================= CONFIG =================
 POLICY = models.nn.TimePolicy_Fiderer_16 #choose network
-#RESAMPLE_FN = resample_liu_west
-RESAMPLE_FN = resample
+RESAMPLE_FN = resample_liu_west
+#RESAMPLE_FN = resample
 #POLICY = models.nn.TimePolicy_1
 
 N_PARTICLES = 10000
@@ -30,7 +30,7 @@ CEM_ELITE_FRAC = 0.1
 CEM_INIT_STD = 1.0
 CEM_GENERATIONS = 100
 HISTORY_SIZE = 30 #size od time array passed to networks (input_dim=HISTORY_SIZE+2)
-RANDOM_SEED=42
+RANDOM_SEED=50
 
 np.random.seed(RANDOM_SEED) #seed for omegas generation
 TRUE_OMEGAS_LIST = np.random.uniform(0.0, 1.0, size=CEM_GENERATIONS) #generate list of random omegas

@@ -14,14 +14,14 @@ from modules.algorithms.seq_montecarlo import resample_liu_west, resample
 # CONFIG
 # ============================================================
 
-RUN_ID = "ddc76c3b2cce47bca4b12af5cc715cf8"
+RUN_ID = "43eaea9af6f9469d88c668ad2b6e889a"
 MODEL_NAME = "policy"
-RESAMPLE_FN=resample
+RESAMPLE_FN=resample_liu_west
 
-TRUE_OMEGA = 0.2
+#TRUE_OMEGA = 0.2
 N_PARTICLES = 3000
 EPISODE_LEN = 125
-HISTORY_SIZE = 30
+HISTORY_SIZE = 60
 N_OMEGAS = 10000
 
 TRUE_OMEGAS_LIST = np.random.uniform(0.0, 1.0, size=N_OMEGAS) #generate list of random omegas
@@ -178,11 +178,22 @@ plt.tight_layout()
 plt.savefig(run_dir / "predicted_t.png")
 plt.close()
 
-# ---- Posterior variance over N omegas
+# ---- Posterior variance over N omegas logaritmic
 plt.figure(figsize=(6, 4))
 plt.plot(steps, var_list_N_mean, marker="o")
 plt.yscale('log')
 plt.ylim(1e-3, 1e-1)
+plt.xlabel("Step")
+plt.ylabel(f"Posterior variance over {N_OMEGAS} omegas")
+plt.title("Posterior collapse during experiment")
+plt.grid(True)
+plt.tight_layout()
+plt.savefig(run_dir / "posterior_variance_over_omega_log.png")
+plt.close()
+
+# ---- Posterior variance over N omegas
+plt.figure(figsize=(6, 4))
+plt.plot(steps, var_list_N_mean, marker="o")
 plt.xlabel("Step")
 plt.ylabel(f"Posterior variance over {N_OMEGAS} omegas")
 plt.title("Posterior collapse during experiment")
