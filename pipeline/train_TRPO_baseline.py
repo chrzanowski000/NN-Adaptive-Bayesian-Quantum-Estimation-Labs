@@ -19,13 +19,9 @@ from modules.rewards import posterior_variance
 from modules.simulation import measure, FIXED_T2
 from utils.git_utils.git import get_git_branch, get_git_commit, git_is_dirty
 
-try:
-    from sb3_contrib import TRPO as SB3TRPO
-    from stable_baselines3.common.callbacks import BaseCallback
-except ImportError as e:
-    raise ImportError(
-        "Stable-Baselines TRPO is required. Install with: pip install stable-baselines3 sb3-contrib"
-    ) from e
+
+from sb3_contrib import TRPO as SB3TRPO
+from stable_baselines3.common.callbacks import BaseCallback
 
 
 # ================= CONFIG =================
@@ -37,14 +33,14 @@ EPISODE_LEN = 100
 HISTORY_SIZE = 30
 RANDOM_SEED = 50
 
-N_TRAIN_EPISODES = 1000
+N_TRAIN_EPISODES = int(10e5)
 TOTAL_TIMESTEPS = N_TRAIN_EPISODES * EPISODE_LEN
 
 GAMMA = 0.99
 GAE_LAMBDA = 0.95
 TARGET_KL = 1e-2
 
-PLOT_EVERY = 5
+PLOT_COUNT = 100
 T_MIN = 0.1
 T_MAX = 3000.0
 
@@ -170,11 +166,35 @@ class AdaptiveSMCEnv(gym.Env):
 
 
 class MlflowEpisodeCallback(BaseCallback):
-    def __init__(self, artifacts_dir="artifacts", plot_every=5, verbose=0):
+    def __init__(self, total_timesteps, artifacts_dir="artifacts", plot_count=100, verbose=0):
         super().__init__(verbose)
         self.episode_idx = 0
         self.artifacts_dir = artifacts_dir
-        self.plot_every = plot_every
+        self.total_timesteps = int(total_timesteps)
+        self.plot_count = int(plot_count)
+        self.plot_interval = max(1, self.total_timesteps // self.plot_count)
+        self.next_plot_step = self.plot_interval
+        self.plot_idx = 0
+        self.last_episode_info = None
+
+    def _log_posterior_plot(self, info):
+        self.plot_idx += 1
+        w = normalize(info["logw"])
+        particles = info["particles"]
+
+        plt.figure(figsize=(6, 4))
+        plt.hist(particles[:, 0], weights=w, bins=50, density=True)
+        plt.axvline(info["true_omega"], color="red", linestyle="--", label="true ω")
+        plt.xlabel("ω")
+        plt.ylabel("posterior density")
+        plt.title(f"Posterior (progress {self.plot_idx:03d}/{self.plot_count})")
+        plt.legend()
+
+        fname = f"posterior_pct_{self.plot_idx:03d}.png"
+        fpath = os.path.join(self.artifacts_dir, fname)
+        plt.savefig(fpath)
+        plt.close()
+        mlflow.log_artifact(fpath)
 
     def _on_step(self) -> bool:
         infos = self.locals.get("infos", [])
@@ -193,26 +213,21 @@ class MlflowEpisodeCallback(BaseCallback):
             mlflow.log_metric("mean_ess", info["final_ess"], step=idx)
             mlflow.log_metric("mean_t", info["mean_t"], step=idx)
             mlflow.log_metric("true_omega", info["true_omega"], step=idx)
+            self.last_episode_info = info
 
-            if idx % self.plot_every == 0:
-                w = normalize(info["logw"])
-                particles = info["particles"]
-
-                plt.figure(figsize=(6, 4))
-                plt.hist(particles[:, 0], weights=w, bins=50, density=True)
-                plt.axvline(info["true_omega"], color="red", linestyle="--", label="true ω")
-                plt.xlabel("ω")
-                plt.ylabel("posterior density")
-                plt.title(f"Posterior (ep {idx})")
-                plt.legend()
-
-                fname = f"posterior_ep_{idx:03d}.png"
-                fpath = os.path.join(self.artifacts_dir, fname)
-                plt.savefig(fpath)
-                plt.close()
-                mlflow.log_artifact(fpath)
+        while (
+            self.last_episode_info is not None
+            and self.plot_idx < self.plot_count
+            and self.num_timesteps >= self.next_plot_step
+        ):
+            self._log_posterior_plot(self.last_episode_info)
+            self.next_plot_step += self.plot_interval
 
         return True
+
+    def _on_training_end(self) -> None:
+        while self.last_episode_info is not None and self.plot_idx < self.plot_count:
+            self._log_posterior_plot(self.last_episode_info)
 
 
 def evaluate_episode(model, env):
@@ -276,7 +291,11 @@ with mlflow.start_run():
         seed=RANDOM_SEED,
     )
 
-    callback = MlflowEpisodeCallback(artifacts_dir="artifacts", plot_every=PLOT_EVERY)
+    callback = MlflowEpisodeCallback(
+        total_timesteps=TOTAL_TIMESTEPS,
+        artifacts_dir="artifacts",
+        plot_count=PLOT_COUNT,
+    )
     model.learn(total_timesteps=TOTAL_TIMESTEPS, callback=callback)
 
     model_path = os.path.join("artifacts", "trpo_sb3_policy")
