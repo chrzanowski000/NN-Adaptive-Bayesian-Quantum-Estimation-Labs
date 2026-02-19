@@ -9,3 +9,5 @@ pymc
 jax
 jaxlib
 pytensor
+stable-baselines3
+sb3-contrib

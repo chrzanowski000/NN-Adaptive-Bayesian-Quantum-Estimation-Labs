@@ -53,7 +53,7 @@ def resample_liu_west(particles, logw, a=0.98):
 
     # weighted covariance
     diff = particles - mean
-    cov = (w[:, None] * diff).T @ diff
+    cov = (w[:, None] * diff).T @ diff #w[:, None] adds new axis (N,) becomes (N,1) but (N,1) will become (N,1,1)
 
     # shrinkage noise scale
     h2 = 1.0 - a**2
