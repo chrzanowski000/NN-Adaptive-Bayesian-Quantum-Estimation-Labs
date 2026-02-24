@@ -48,14 +48,15 @@ policy_kwargs = dict(
 )
 # ==========================================
 # mlflow tracking
-mlflow.set_tracking_uri("file:///home/chrzanowski/mlflow_server")
 # mlflow.set_tracking_uri("http://127.0.0.1:5000")
+mlflow.set_tracking_uri("file:///home/chrzanowski/mlflow_tracking")
 mlflow.set_experiment("fiderer / omega_estimation / trpo")
 
 with mlflow.start_run(run_name=f"seed_{RANDOM_SEED}"):
     mlflow.set_tags(
         {"project": "fiderer", "algo": "trpo", "env": "sequential_montecarlo"}
     )
+os.makedirs("artifacts", exist_ok=True)
 
 
 # ==========================================
@@ -257,12 +258,6 @@ def evaluate_episode(model, env):
 
     return info
 
-
-mlflow.set_experiment("trpo_baseline_qubit_omega_only")
-os.makedirs("artifacts", exist_ok=True)
-
-if mlflow.active_run() is not None:
-    mlflow.end_run()
 
 with mlflow.start_run():
     mlflow.log_params(
