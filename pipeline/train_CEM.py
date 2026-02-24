@@ -1,4 +1,5 @@
 import os
+import platform
 
 import matplotlib.pyplot as plt
 import mlflow
@@ -45,6 +46,28 @@ with mlflow.start_run():
         {"project": "fiderer", "algo": "trpo", "env": "sequential_montecarlo"}
     )
 os.makedirs("artifacts", exist_ok=True)
+
+
+def log_system_static():
+    mlflow.set_tags(
+        {
+            "system.os": platform.system(),
+            "system.os_version": platform.version(),
+            "system.python_version": platform.python_version(),
+            "system.cpu_model": platform.processor(),
+            "system.cpu_cores": os.cpu_count(),
+            "system.device": "cpu" if not torch.cuda.is_available() else "cuda",
+            "system.torch_version": torch.__version__,
+        }
+    )
+
+    if torch.cuda.is_available():
+        mlflow.set_tags(
+            {
+                "system.gpu_name": torch.cuda.get_device_name(0),
+                "system.cuda_version": torch.version.cuda,
+            }
+        )
 
 
 with mlflow.start_run():

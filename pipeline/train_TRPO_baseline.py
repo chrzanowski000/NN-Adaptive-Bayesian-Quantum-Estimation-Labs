@@ -1,10 +1,12 @@
 import os
+import platform
 from collections import deque
 
 import gymnasium as gym
 import matplotlib.pyplot as plt
 import mlflow
 import numpy as np
+import torch
 from gymnasium import spaces
 from sb3_contrib import TRPO as SB3TRPO
 from stable_baselines3.common.callbacks import BaseCallback
@@ -40,23 +42,115 @@ PLOT_COUNT = 100
 T_MIN = 0.1
 T_MAX = 3000.0
 
-np.random.seed(RANDOM_SEED)
-TRUE_OMEGAS_LIST = np.random.uniform(0.0, 1.0, size=N_TRAIN_EPISODES)
-
 policy_kwargs = dict(
     net_arch=[256, 256],
 )
+
+np.random.seed(RANDOM_SEED)
+TRUE_OMEGAS_LIST = np.random.uniform(0.0, 1.0, size=N_TRAIN_EPISODES)
+
+# device setup
+DEVICE = "cpu"  # or "cuda"
+if DEVICE == "cuda" and not torch.cuda.is_available():
+    raise RuntimeError("CUDA requested but not available.")
+project_tags = {"project": "fiderer", "algo": "trpo", "env": "sequential_montecarlo"}
+
 # ==========================================
-# mlflow tracking
-# mlflow.set_tracking_uri("http://127.0.0.1:5000")
 mlflow.set_tracking_uri("file:///home/chrzanowski/mlflow_tracking")
 mlflow.set_experiment("fiderer / omega_estimation / trpo")
-
-with mlflow.start_run():
-    mlflow.set_tags(
-        {"project": "fiderer", "algo": "trpo", "env": "sequential_montecarlo"}
-    )
 os.makedirs("artifacts", exist_ok=True)
+
+
+# ==========================================
+def log_system_static(device: str):
+    mlflow.log_param("device", device)  # experimental variable
+
+    mlflow.set_tags(
+        {
+            "system.device": device,
+            "system.os": platform.system(),
+            "system.os_version": platform.version(),
+            "system.python_version": platform.python_version(),
+            "system.cpu_model": platform.processor(),
+            "system.cpu_cores": os.cpu_count(),
+            "system.torch_version": torch.__version__,
+        }
+    )
+
+    if device == "cuda":
+        mlflow.set_tags(
+            {
+                "system.gpu_name": torch.cuda.get_device_name(0),
+                "system.cuda_version": torch.version.cuda,
+            }
+        )
+
+
+class MlflowEpisodeCallback(BaseCallback):
+    def __init__(
+        self, total_timesteps, artifacts_dir="artifacts", plot_count=100, verbose=0
+    ):
+        super().__init__(verbose)
+        self.episode_idx = 0
+        self.artifacts_dir = artifacts_dir
+        self.total_timesteps = int(total_timesteps)
+        self.plot_count = int(plot_count)
+        self.plot_interval = max(1, self.total_timesteps // self.plot_count)
+        self.next_plot_step = self.plot_interval
+        self.plot_idx = 0
+        self.last_episode_info = None
+
+    def _log_posterior_plot(self, info):
+        self.plot_idx += 1
+        w = normalize(info["logw"])
+        particles = info["particles"]
+
+        plt.figure(figsize=(6, 4))
+        plt.hist(particles[:, 0], weights=w, bins=50, density=True)
+        plt.axvline(info["true_omega"], color="red", linestyle="--", label="true ω")
+        plt.xlabel("ω")
+        plt.ylabel("posterior density")
+        plt.title(f"Posterior (progress {self.plot_idx:03d}/{self.plot_count})")
+        plt.legend()
+
+        fname = f"posterior_pct_{self.plot_idx:03d}.png"
+        fpath = os.path.join(self.artifacts_dir, fname)
+        plt.savefig(fpath)
+        plt.close()
+        mlflow.log_artifact(fpath)
+
+    def _on_step(self) -> bool:
+        infos = self.locals.get("infos", [])
+        dones = self.locals.get("dones", [])
+
+        for done, info in zip(dones, infos):
+            if not done:
+                continue
+
+            idx = self.episode_idx
+            self.episode_idx += 1
+
+            mlflow.log_metric("mean_reward", info["reward_total"], step=idx)
+            mlflow.log_metric("mean_init_var", info["initial_var"], step=idx)
+            mlflow.log_metric("mean_final_var", info["final_var"], step=idx)
+            mlflow.log_metric("mean_ess", info["final_ess"], step=idx)
+            mlflow.log_metric("mean_t", info["mean_t"], step=idx)
+            mlflow.log_metric("true_omega", info["true_omega"], step=idx)
+            self.last_episode_info = info
+
+        while (
+            self.last_episode_info is not None
+            and self.plot_idx < self.plot_count
+            and self.num_timesteps >= self.next_plot_step
+        ):
+            self._log_posterior_plot(self.last_episode_info)
+            self.next_plot_step += self.plot_interval
+
+        return True
+
+    def _on_training_end(self) -> None:
+        while self.last_episode_info is not None and self.plot_idx < self.plot_count:
+            self._log_posterior_plot(self.last_episode_info)
 
 
 # ==========================================
@@ -180,73 +274,6 @@ class AdaptiveSMCEnv(gym.Env):
         return self._get_obs(), float(reward), terminated, truncated, info
 
 
-class MlflowEpisodeCallback(BaseCallback):
-    def __init__(
-        self, total_timesteps, artifacts_dir="artifacts", plot_count=100, verbose=0
-    ):
-        super().__init__(verbose)
-        self.episode_idx = 0
-        self.artifacts_dir = artifacts_dir
-        self.total_timesteps = int(total_timesteps)
-        self.plot_count = int(plot_count)
-        self.plot_interval = max(1, self.total_timesteps // self.plot_count)
-        self.next_plot_step = self.plot_interval
-        self.plot_idx = 0
-        self.last_episode_info = None
-
-    def _log_posterior_plot(self, info):
-        self.plot_idx += 1
-        w = normalize(info["logw"])
-        particles = info["particles"]
-
-        plt.figure(figsize=(6, 4))
-        plt.hist(particles[:, 0], weights=w, bins=50, density=True)
-        plt.axvline(info["true_omega"], color="red", linestyle="--", label="true ω")
-        plt.xlabel("ω")
-        plt.ylabel("posterior density")
-        plt.title(f"Posterior (progress {self.plot_idx:03d}/{self.plot_count})")
-        plt.legend()
-
-        fname = f"posterior_pct_{self.plot_idx:03d}.png"
-        fpath = os.path.join(self.artifacts_dir, fname)
-        plt.savefig(fpath)
-        plt.close()
-        mlflow.log_artifact(fpath)
-
-    def _on_step(self) -> bool:
-        infos = self.locals.get("infos", [])
-        dones = self.locals.get("dones", [])
-
-        for done, info in zip(dones, infos):
-            if not done:
-                continue
-
-            idx = self.episode_idx
-            self.episode_idx += 1
-
-            mlflow.log_metric("mean_reward", info["reward_total"], step=idx)
-            mlflow.log_metric("mean_init_var", info["initial_var"], step=idx)
-            mlflow.log_metric("mean_final_var", info["final_var"], step=idx)
-            mlflow.log_metric("mean_ess", info["final_ess"], step=idx)
-            mlflow.log_metric("mean_t", info["mean_t"], step=idx)
-            mlflow.log_metric("true_omega", info["true_omega"], step=idx)
-            self.last_episode_info = info
-
-        while (
-            self.last_episode_info is not None
-            and self.plot_idx < self.plot_count
-            and self.num_timesteps >= self.next_plot_step
-        ):
-            self._log_posterior_plot(self.last_episode_info)
-            self.next_plot_step += self.plot_interval
-
-        return True
-
-    def _on_training_end(self) -> None:
-        while self.last_episode_info is not None and self.plot_idx < self.plot_count:
-            self._log_posterior_plot(self.last_episode_info)
-
-
 def evaluate_episode(model, env):
     obs, _ = env.reset()
     done = False
@@ -259,7 +286,10 @@ def evaluate_episode(model, env):
     return info
 
 
-with mlflow.start_run():
+with mlflow.start_run(log_system_metrics=True):
+    log_system_static(DEVICE)
+    mlflow.set_tags(project_tags)
+
     mlflow.log_params(
         {
             "N_PARTICLES": N_PARTICLES,
@@ -301,15 +331,16 @@ with mlflow.start_run():
         target_kl=TARGET_KL,
         verbose=1,
         seed=RANDOM_SEED,
-        device="cpu",
+        device=DEVICE,
     )
 
-    callback = MlflowEpisodeCallback(
+    callback_model = MlflowEpisodeCallback(
         total_timesteps=TOTAL_TIMESTEPS,
         artifacts_dir="artifacts",
         plot_count=PLOT_COUNT,
     )
-    model.learn(total_timesteps=TOTAL_TIMESTEPS, callback=callback)
+
+    model.learn(total_timesteps=TOTAL_TIMESTEPS, callback=[callback_model])
 
     model_path = os.path.join("artifacts", "trpo_sb3_policy")
     model.save(model_path)
