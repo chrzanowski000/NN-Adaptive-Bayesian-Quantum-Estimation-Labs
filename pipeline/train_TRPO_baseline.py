@@ -52,7 +52,7 @@ policy_kwargs = dict(
 mlflow.set_tracking_uri("file:///home/chrzanowski/mlflow_tracking")
 mlflow.set_experiment("fiderer / omega_estimation / trpo")
 
-with mlflow.start_run(run_name=f"seed_{RANDOM_SEED}"):
+with mlflow.start_run(run_name="baseline"):
     mlflow.set_tags(
         {"project": "fiderer", "algo": "trpo", "env": "sequential_montecarlo"}
     )

@@ -1,27 +1,24 @@
+import os
+
+import matplotlib.pyplot as plt
 import mlflow
 import mlflow.pytorch
-import torch
-import matplotlib.pyplot as plt
-import os
 import numpy as np
-import sys
+import torch
 from tqdm import tqdm
 
-from modules.algorithms.CEM import CEM
 import models.nn
-from modules.algorithms.seq_montecarlo import normalize, resample_liu_west, resample
+from modules.algorithms.CEM import CEM
+from modules.algorithms.seq_montecarlo import normalize, resample_liu_west
 from modules.rollout import rollout
 from modules.simulation import FIXED_T2
-
 from utils.git_utils.git import get_git_branch, get_git_commit, git_is_dirty
 
-
-
 # ================= CONFIG =================
-POLICY = models.nn.TimePolicy_Fiderer_16 #choose network
+POLICY = models.nn.TimePolicy_Fiderer_16  # choose network
 RESAMPLE_FN = resample_liu_west
-#RESAMPLE_FN = resample
-#POLICY = models.nn.TimePolicy_1
+# RESAMPLE_FN = resample
+# POLICY = models.nn.TimePolicy_1
 
 N_PARTICLES = 2000
 EPISODE_LEN = 100
@@ -29,64 +26,64 @@ CEM_POP = 1000
 CEM_ELITE_FRAC = 0.1
 CEM_INIT_STD = 1.0
 CEM_GENERATIONS = 100
-HISTORY_SIZE = 30 #size od time array passed to networks (input_dim=HISTORY_SIZE+2)
-RANDOM_SEED=50
+HISTORY_SIZE = 30  # size od time array passed to networks (input_dim=HISTORY_SIZE+2)
+RANDOM_SEED = 50
 
-np.random.seed(RANDOM_SEED) #seed for omegas generation
-TRUE_OMEGAS_LIST = np.random.uniform(0.0, 1.0, size=CEM_GENERATIONS) #generate list of random omegas
+np.random.seed(RANDOM_SEED)  # seed for omegas generation
+TRUE_OMEGAS_LIST = np.random.uniform(
+    0.0, 1.0, size=CEM_GENERATIONS
+)  # generate list of random omegas
 
 
 # ==========================================
 
-mlflow.set_experiment("cem_qubit_omega_only")
-#mlflow.log_artifacts(".", artifact_path="source_code")
-os.makedirs("artifacts", exist_ok=True) #create folder for artifacts
+mlflow.set_tracking_uri("file:///home/chrzanowski/mlflow_tracking")
+mlflow.set_experiment("fiderer / omega_estimation / trpo")
 
+with mlflow.start_run(run_name="baseline"):
+    mlflow.set_tags(
+        {"project": "fiderer", "algo": "trpo", "env": "sequential_montecarlo"}
+    )
+os.makedirs("artifacts", exist_ok=True)
 
-
-if mlflow.active_run() is not None:
-    mlflow.end_run()
 
 with mlflow.start_run():
-
-    mlflow.log_params({
-        "N_PARTICLES": N_PARTICLES,
-        "EPISODE_LEN": EPISODE_LEN,
-        "FIXED_T2": FIXED_T2,
-        "TRUE_OMEGAS_LIST": TRUE_OMEGAS_LIST,
-        "CEM_POP": CEM_POP,
-        "CEM_ELITE_FRAC": CEM_ELITE_FRAC,
-        "CEM_INIT_STD": CEM_INIT_STD,
-        "HISOTRY_SIZE": HISTORY_SIZE ,
-        "policy_name": POLICY.__name__,
-        "resample_function": RESAMPLE_FN.__name__,
-        "RANDOM_SEED": RANDOM_SEED,
-
-        # --- git ---
-        "git_commit": get_git_commit(),
-        "git_branch": get_git_branch(),
-        "git_dirty": git_is_dirty(),
-
-
-
-    })
+    mlflow.log_params(
+        {
+            "N_PARTICLES": N_PARTICLES,
+            "EPISODE_LEN": EPISODE_LEN,
+            "FIXED_T2": FIXED_T2,
+            "TRUE_OMEGAS_LIST": TRUE_OMEGAS_LIST,
+            "CEM_POP": CEM_POP,
+            "CEM_ELITE_FRAC": CEM_ELITE_FRAC,
+            "CEM_INIT_STD": CEM_INIT_STD,
+            "HISOTRY_SIZE": HISTORY_SIZE,
+            "policy_name": POLICY.__name__,
+            "resample_function": RESAMPLE_FN.__name__,
+            "RANDOM_SEED": RANDOM_SEED,
+            # --- git ---
+            "git_commit": get_git_commit(),
+            "git_branch": get_git_branch(),
+            "git_dirty": git_is_dirty(),
+        }
+    )
 
     cem = CEM(POLICY, CEM_POP, CEM_ELITE_FRAC, CEM_INIT_STD, HISTORY_SIZE)
 
     for gen in tqdm(range(CEM_GENERATIONS)):
-        TRUE_OMEGA=TRUE_OMEGAS_LIST[gen]
-        #print("TRUE OMEGA: ",TRUE_OMEGA)
+        TRUE_OMEGA = TRUE_OMEGAS_LIST[gen]
+        # print("TRUE OMEGA: ",TRUE_OMEGA)
         rewards, stats = cem.step(
             rollout_fn=lambda theta: rollout(
-                                            cem.policy_model,
-                                            RESAMPLE_FN,
-                                            theta,
-                                            TRUE_OMEGA,
-                                            N_PARTICLES,
-                                            EPISODE_LEN,
-                                            HISTORY_SIZE,
+                cem.policy_model,
+                RESAMPLE_FN,
+                theta,
+                TRUE_OMEGA,
+                N_PARTICLES,
+                EPISODE_LEN,
+                HISTORY_SIZE,
             ),
-            debug=True
+            debug=True,
         )
 
         # ---- stats ----
@@ -109,10 +106,9 @@ with mlflow.start_run():
         mlflow.log_metric("mean_t", mean_t, step=gen)
         mlflow.log_metric("true_omega", TRUE_OMEGA, step=gen)
 
-
-        if gen % 5==0:
+        if gen % 5 == 0:
             ###----
-            #TEST RUN
+            # TEST RUN
             ###----
 
             # ---- posterior histogram (best policy) ---- #perhaps should be removed i dont know how it interfers exactly
@@ -123,17 +119,14 @@ with mlflow.start_run():
                 TRUE_OMEGA,
                 N_PARTICLES,
                 EPISODE_LEN,
-                HISTORY_SIZE
+                HISTORY_SIZE,
             )
 
-
-
-            
             ### get metrics fror histograms
             logw = info["logw"]
             particles = info["particles"]
             ###
-            #PLOTS
+            # PLOTS
             ###
             w = normalize(logw)
 
@@ -151,22 +144,19 @@ with mlflow.start_run():
             plt.legend()
 
             fname = f"posterior_gen_{gen:03d}.png"
-            plt.savefig(os.path.join("artifacts",fname))
+            plt.savefig(os.path.join("artifacts", fname))
             plt.close()
 
-            mlflow.log_artifact(os.path.join("artifacts",fname))
+            mlflow.log_artifact(os.path.join("artifacts", fname))
 
-            #print(f"gen {gen:02d} | mean R = {mean_r:.3e} | max R = {max_r:.3e}")
-
-
-
+            # print(f"gen {gen:02d} | mean R = {mean_r:.3e} | max R = {max_r:.3e}")
 
     # ---- save final policy ---- #i thing it does something wrong #to correct later
     final_policy = cem.policy_model
     idx = 0
     for p in final_policy.parameters():
         n = p.numel()
-        p.data.copy_(cem.mu[idx:idx+n].view_as(p))
+        p.data.copy_(cem.mu[idx : idx + n].view_as(p))
         idx += n
 
     mlflow.pytorch.log_model(final_policy, name="policy")
