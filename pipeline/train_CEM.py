@@ -23,7 +23,7 @@ RESAMPLE_FN = resample_liu_west
 #RESAMPLE_FN = resample
 #POLICY = models.nn.TimePolicy_1
 
-N_PARTICLES = 10000
+N_PARTICLES = 2000
 EPISODE_LEN = 100
 CEM_POP = 1000
 CEM_ELITE_FRAC = 0.1

@@ -2,7 +2,7 @@ import numpy as np
 
 
 
-FIXED_T2 = 10.0
+FIXED_T2 = 100.0
 
 def measure(true_omega, t, rng=None):
     if rng is None:

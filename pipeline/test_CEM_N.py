@@ -14,14 +14,14 @@ from modules.algorithms.seq_montecarlo import resample_liu_west, resample
 # CONFIG
 # ============================================================
 
-RUN_ID = "43eaea9af6f9469d88c668ad2b6e889a"
+RUN_ID = "0d475ab665e74e1fa9f948de432e497d"
 MODEL_NAME = "policy"
 RESAMPLE_FN=resample_liu_west
 
 #TRUE_OMEGA = 0.2
-N_PARTICLES = 3000
+N_PARTICLES = 2000
 EPISODE_LEN = 125
-HISTORY_SIZE = 60
+HISTORY_SIZE = 30
 N_OMEGAS = 10000
 
 TRUE_OMEGAS_LIST = np.random.uniform(0.0, 1.0, size=N_OMEGAS) #generate list of random omegas
@@ -182,7 +182,7 @@ plt.close()
 plt.figure(figsize=(6, 4))
 plt.plot(steps, var_list_N_mean, marker="o")
 plt.yscale('log')
-plt.ylim(1e-3, 1e-1)
+plt.ylim(1e-4, 1e-1)
 plt.xlabel("Step")
 plt.ylabel(f"Posterior variance over {N_OMEGAS} omegas")
 plt.title("Posterior collapse during experiment")

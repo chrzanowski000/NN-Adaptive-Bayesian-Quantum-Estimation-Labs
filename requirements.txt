@@ -11,3 +11,4 @@ jaxlib
 pytensor
 stable-baselines3
 sb3-contrib
+mlflow

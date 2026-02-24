@@ -1,28 +1,24 @@
 import os
 from collections import deque
 
-import mlflow
-import matplotlib.pyplot as plt
-import numpy as np
 import gymnasium as gym
+import matplotlib.pyplot as plt
+import mlflow
+import numpy as np
 from gymnasium import spaces
-
-from modules.algorithms.seq_montecarlo import (
-    init_particles,
-    smc_update_no_resample,
-    ess,
-    normalize,
-    resample_liu_west,
-    resample,
-)
-from modules.rewards import posterior_variance
-from modules.simulation import measure, FIXED_T2
-from utils.git_utils.git import get_git_branch, get_git_commit, git_is_dirty
-
-
 from sb3_contrib import TRPO as SB3TRPO
 from stable_baselines3.common.callbacks import BaseCallback
 
+from modules.algorithms.seq_montecarlo import (
+    ess,
+    init_particles,
+    normalize,
+    resample_liu_west,
+    smc_update_no_resample,
+)
+from modules.rewards import posterior_variance
+from modules.simulation import FIXED_T2, measure
+from utils.git_utils.git import get_git_branch, get_git_commit, git_is_dirty
 
 # ================= CONFIG =================
 RESAMPLE_FN = resample_liu_west
@@ -33,7 +29,7 @@ EPISODE_LEN = 100
 HISTORY_SIZE = 30
 RANDOM_SEED = 50
 
-N_TRAIN_EPISODES = int(10e5)
+N_TRAIN_EPISODES = int(10e4)
 TOTAL_TIMESTEPS = N_TRAIN_EPISODES * EPISODE_LEN
 
 GAMMA = 0.99
@@ -46,9 +42,23 @@ T_MAX = 3000.0
 
 np.random.seed(RANDOM_SEED)
 TRUE_OMEGAS_LIST = np.random.uniform(0.0, 1.0, size=N_TRAIN_EPISODES)
+
+policy_kwargs = dict(
+    net_arch=[256, 256],
+)
 # ==========================================
+# mlflow tracking
+mlflow.set_tracking_uri("file:///home/chrzanowski/mlflow_server")
+# mlflow.set_tracking_uri("http://127.0.0.1:5000")
+mlflow.set_experiment("fiderer / omega_estimation / trpo")
+
+with mlflow.start_run(run_name=f"seed_{RANDOM_SEED}"):
+    mlflow.set_tags(
+        {"project": "fiderer", "algo": "trpo", "env": "sequential_montecarlo"}
+    )
 
 
+# ==========================================
 class AdaptiveSMCEnv(gym.Env):
     metadata = {"render_modes": []}
 
@@ -94,7 +104,9 @@ class AdaptiveSMCEnv(gym.Env):
         self.step_idx = 0
         self.t_history = deque([0.0] * self.history_size, maxlen=self.history_size)
         self.particles, self.logw = init_particles(self.n_particles)
-        self.true_omega = float(self.true_omegas[self.omega_idx % len(self.true_omegas)])
+        self.true_omega = float(
+            self.true_omegas[self.omega_idx % len(self.true_omegas)]
+        )
         self.omega_idx += 1
 
         self.initial_var = posterior_variance(self.particles, self.logw)
@@ -125,7 +137,9 @@ class AdaptiveSMCEnv(gym.Env):
         prev_var = posterior_variance(self.particles, self.logw)
         d = measure(self.true_omega, t, rng=self.rng)
 
-        self.particles, self.logw = smc_update_no_resample(self.particles, self.logw, d, t)
+        self.particles, self.logw = smc_update_no_resample(
+            self.particles, self.logw, d, t
+        )
         if ess(self.logw) < 0.75 * len(self.logw):
             self.particles, self.logw = self.resample_fn(self.particles, self.logw)
 
@@ -166,7 +180,9 @@ class AdaptiveSMCEnv(gym.Env):
 
 
 class MlflowEpisodeCallback(BaseCallback):
-    def __init__(self, total_timesteps, artifacts_dir="artifacts", plot_count=100, verbose=0):
+    def __init__(
+        self, total_timesteps, artifacts_dir="artifacts", plot_count=100, verbose=0
+    ):
         super().__init__(verbose)
         self.episode_idx = 0
         self.artifacts_dir = artifacts_dir
@@ -284,11 +300,13 @@ with mlflow.start_run():
     model = SB3TRPO(
         "MlpPolicy",
         env,
+        policy_kwargs=policy_kwargs,
         gamma=GAMMA,
         gae_lambda=GAE_LAMBDA,
         target_kl=TARGET_KL,
         verbose=1,
         seed=RANDOM_SEED,
+        device="cpu",
     )
 
     callback = MlflowEpisodeCallback(
