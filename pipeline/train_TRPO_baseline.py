@@ -3,6 +3,9 @@ import platform
 from collections import deque
 
 import gymnasium as gym
+import matplotlib
+
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import mlflow
 import numpy as np
@@ -286,6 +289,9 @@ def evaluate_episode(model, env):
     return info
 
 
+# ==========================================
+# TRAINING
+# ==========================================
 with mlflow.start_run(log_system_metrics=True):
     log_system_static(DEVICE)
     mlflow.set_tags(project_tags)
