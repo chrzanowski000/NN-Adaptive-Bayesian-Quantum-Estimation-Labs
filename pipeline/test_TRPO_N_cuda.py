@@ -1,5 +1,6 @@
 import json
 import re
+import time
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -13,6 +14,19 @@ from modules.algorithms.seq_montecarlo import (
     resample_liu_west_batched,
 )
 from modules.rollout_sb3_cuda import rollout_batch
+
+# ============================================================
+# REPRODUCIBILITY
+# ============================================================
+
+SEED = 42
+
+np.random.seed(SEED)
+torch.manual_seed(SEED)
+torch.cuda.manual_seed_all(SEED)
+
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
 
 # ============================================================
 # CONFIG
@@ -31,10 +45,9 @@ ACTION_LOW = 0.1
 ACTION_HIGH = 3000.0
 
 DEVICE = "cuda"
-SEED = 42
-np.random.seed(SEED)
-TRUE_OMEGAS_LIST = np.random.uniform(0.0, 1.0, size=N_OMEGAS)
 
+rng = np.random.default_rng(SEED)
+TRUE_OMEGAS_LIST = rng.uniform(0.0, 1.0, size=N_OMEGAS)
 
 # ============================================================
 # Utility
@@ -60,7 +73,7 @@ def get_next_run_dir(base_dir="validation"):
 
 
 # ============================================================
-# Load SB3 model on CUDA
+# Load SB3 model
 # ============================================================
 
 mlflow.set_tracking_uri("file:///home/chrzanowski/mlflow_tracking")
@@ -75,15 +88,13 @@ print("Loaded model on:", DEVICE)
 run_dir = get_next_run_dir("validation")
 print("Saving results to:", run_dir)
 
-
 # ============================================================
-# Batched evaluation
+# Batched evaluation over N omegas
 # ============================================================
 
-all_var = []
-all_mean = []
-all_ess = []
-all_t = []
+start_time = time.time()
+
+var_list_N = torch.zeros(EPISODE_LEN, 1)
 
 for i in tqdm(range(0, N_OMEGAS, BATCH_SIZE)):
     batch = TRUE_OMEGAS_LIST[i : i + BATCH_SIZE]
@@ -100,117 +111,155 @@ for i in tqdm(range(0, N_OMEGAS, BATCH_SIZE)):
         device=DEVICE,
     )
 
-    all_var.append(var_traj.cpu())
-    all_mean.append(mean_traj.cpu())
-    all_ess.append(ess_traj.cpu())
-    all_t.append(t_traj.cpu())
+    var_list_N = torch.cat(
+        [var_list_N, var_traj.cpu().T],
+        dim=1,
+    )
 
-# Stack: (N_OMEGAS, T)
-var_all = torch.cat(all_var, dim=0)
-mean_all = torch.cat(all_mean, dim=0)
-ess_all = torch.cat(all_ess, dim=0)
-t_all = torch.cat(all_t, dim=0)
+# remove dummy column
+var_list_N = var_list_N[:, 1:]
+var_list_N_mean = var_list_N.mean(dim=1).numpy()
 
-# Mean across omegas
-var_mean = var_all.mean(dim=0).numpy()
-mean_mean = mean_all.mean(dim=0).numpy()
-ess_mean = ess_all.mean(dim=0).numpy()
-t_mean = t_all.mean(dim=0).numpy()
+# ============================================================
+# Single omega rollout (for identical summary + plots)
+# ============================================================
 
-# Single representative trajectory (first omega)
-var_single = var_all[0].numpy()
-mean_single = mean_all[0].numpy()
-ess_single = ess_all[0].numpy()
-t_single = t_all[0].numpy()
+TRUE_OMEGA = TRUE_OMEGAS_LIST[0]
+
+var_traj, mean_traj, ess_traj, t_traj = rollout_batch(
+    model=sb3_model,
+    omegas=[TRUE_OMEGA],
+    resample_fn=resample_liu_west_batched,
+    N_PARTICLES=N_PARTICLES,
+    EPISODE_LEN=EPISODE_LEN,
+    HISTORY_SIZE=HISTORY_SIZE,
+    action_low=ACTION_LOW,
+    action_high=ACTION_HIGH,
+    device=DEVICE,
+)
+
+var_list = var_traj[0].cpu().numpy()
+mean_list = mean_traj[0].cpu().numpy()
+ess_list = ess_traj[0].cpu().numpy()
+t_list = t_traj[0].cpu().numpy()
 
 steps = np.arange(EPISODE_LEN)
 
-# Reward per step (variance reduction)
-reward = np.zeros(EPISODE_LEN)
-reward[1:] = var_single[:-1] - var_single[1:]
+reward_per_step = np.zeros(EPISODE_LEN)
+reward_per_step[1:] = var_list[:-1] - var_list[1:]
 
+elapsed_time = time.time() - start_time
 
 # ============================================================
-# Save summary
+# Episode summary (IDENTICAL STRUCTURE + device + batch size)
 # ============================================================
 
-summary = {
+episode_summary = {
+    # --- identification
     "run_id": RUN_ID,
+    "model_name": MODEL_NAME,
+    "resampling_model": resample_liu_west_batched.__name__,
+    # --- hardware
+    "device": DEVICE,
+    "batch_size": BATCH_SIZE,
+    "gpu_name": torch.cuda.get_device_name(0) if DEVICE == "cuda" else "cpu",
+    "runtime_seconds": elapsed_time,
+    # --- experiment configuration
+    "true_omega": float(TRUE_OMEGA),
     "n_particles": N_PARTICLES,
     "episode_len": EPISODE_LEN,
-    "n_omegas": N_OMEGAS,
-    "final_variance_over_omegas": float(var_mean[-1]),
+    "history_size": HISTORY_SIZE,
+    "number_of_omegas": N_OMEGAS,
+    # --- single trajectory results
+    "initial_variance": float(var_list[0]),
+    "final_variance": float(var_list[-1]),
+    "total_reward": float(var_list[0] - var_list[-1]),
+    "final_ess": float(ess_list[-1]),
+    "final_posterior_mean": float(mean_list[-1]),
+    "final_posterior_variance": float(var_list[-1]),
+    # --- multi omega statistic
+    "final_variance_over_N_omegas": float(var_list_N_mean[-1]),
+    # --- trajectory summaries
+    "mean_t": float(np.mean(t_list)),
+    "min_t": float(np.min(t_list)),
+    "max_t": float(np.max(t_list)),
 }
 
-with open(run_dir / "episode_summary.json", "w") as f:
-    json.dump(summary, f, indent=2)
+print("\n=== Episode summary ===")
+for k, v in episode_summary.items():
+    print(f"{k:>30s} : {v}")
 
+summary_path = run_dir / "episode_summary.json"
+with open(summary_path, "w") as f:
+    json.dump(episode_summary, f, indent=2)
+
+print("\nEpisode summary saved to", summary_path)
 
 # ============================================================
-# PLOTS
+# PLOTS (IDENTICAL TO ORIGINAL CPU VERSION)
 # ============================================================
 
-# ---- Predicted t
+# Predicted t
 plt.figure(figsize=(6, 4))
-plt.plot(steps, t_single)
+plt.plot(steps, t_list)
 plt.xlabel("Step")
 plt.ylabel("Predicted measurement time t")
-plt.title("Adaptive policy: predicted t")
+plt.title("Adaptive policy: predicted t during episode")
 plt.grid(True)
 plt.tight_layout()
 plt.savefig(run_dir / "predicted_t.png")
 plt.close()
 
-# ---- Posterior variance over N omegas (log)
+# Posterior variance over N omegas (log)
 plt.figure(figsize=(6, 4))
-plt.plot(steps, var_mean)
-plt.ylim(1e-4, 1e-1)
+plt.plot(steps, var_list_N_mean)
 plt.yscale("log")
+plt.ylim(1e-4, 1e-1)
 plt.xlabel("Step")
-plt.ylabel("Posterior variance over N omegas")
-plt.title("Posterior collapse (log)")
+plt.ylabel(f"Posterior variance over {N_OMEGAS} omegas")
+plt.title("Posterior collapse during experiment")
 plt.grid(True)
 plt.tight_layout()
 plt.savefig(run_dir / "posterior_variance_over_omega_log.png")
 plt.close()
 
-# ---- Posterior variance over N omegas
+# Posterior variance over N omegas
 plt.figure(figsize=(6, 4))
-plt.plot(steps, var_mean)
+plt.plot(steps, var_list_N_mean)
 plt.xlabel("Step")
-plt.ylabel("Posterior variance over N omegas")
-plt.title("Posterior collapse")
+plt.ylabel(f"Posterior variance over {N_OMEGAS} omegas")
+plt.title("Posterior collapse during experiment")
 plt.grid(True)
 plt.tight_layout()
 plt.savefig(run_dir / "posterior_variance_over_omega.png")
 plt.close()
 
-# ---- Posterior variance (single)
+# Posterior variance (single)
 plt.figure(figsize=(6, 4))
-plt.plot(steps, var_single)
+plt.plot(steps, var_list)
 plt.xlabel("Step")
 plt.ylabel("Posterior variance")
-plt.title("Posterior variance (single omega)")
+plt.title("Posterior collapse during experiment")
 plt.grid(True)
 plt.tight_layout()
 plt.savefig(run_dir / "posterior_variance.png")
 plt.close()
 
-# ---- ESS
+# ESS
 plt.figure(figsize=(6, 4))
-plt.plot(steps, ess_single)
+plt.plot(steps, ess_list)
 plt.xlabel("Step")
 plt.ylabel("ESS")
-plt.title("Effective Sample Size")
+plt.title("Effective Sample Size during episode")
 plt.grid(True)
 plt.tight_layout()
 plt.savefig(run_dir / "ess.png")
 plt.close()
 
-# ---- Posterior mean
+# Posterior mean
 plt.figure(figsize=(6, 4))
-plt.plot(steps, mean_single, label="posterior mean")
-plt.axhline(TRUE_OMEGAS_LIST[0], linestyle="--", label="true ω")
+plt.plot(steps, mean_list, label="posterior mean")
+plt.axhline(TRUE_OMEGA, linestyle="--", label="true ω")
 plt.xlabel("Step")
 plt.ylabel("ω")
 plt.title("Posterior mean convergence")
@@ -220,15 +269,15 @@ plt.tight_layout()
 plt.savefig(run_dir / "posterior_mean.png")
 plt.close()
 
-# ---- Reward
+# Reward
 plt.figure(figsize=(6, 4))
-plt.plot(steps, reward)
-plt.xlabel("Step")
+plt.plot(steps, reward_per_step)
+plt.xlabel("Episode step")
 plt.ylabel("Reward (variance reduction)")
-plt.title("Reward vs step")
+plt.title("Reward vs episode step")
 plt.grid(True)
 plt.tight_layout()
 plt.savefig(run_dir / "reward_vs_step.png")
 plt.close()
 
-print("\nAll plots saved to:", run_dir)
+print("\nAll figures saved to:", run_dir)

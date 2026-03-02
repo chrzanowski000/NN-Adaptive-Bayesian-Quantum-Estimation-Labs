@@ -178,7 +178,7 @@ print(f"\nEpisode summary saved to {summary_path}")
 
 # ---- Predicted t
 plt.figure(figsize=(6, 4))
-plt.plot(steps, t_list, marker="o")
+plt.plot(steps, t_list)
 plt.xlabel("Step")
 plt.ylabel("Predicted measurement time t")
 plt.title("Adaptive policy: predicted t during episode")
@@ -189,7 +189,7 @@ plt.close()
 
 # ---- Posterior variance over N omegas logaritmic
 plt.figure(figsize=(6, 4))
-plt.plot(steps, var_list_N_mean, marker="o")
+plt.plot(steps, var_list_N_mean)
 plt.yscale("log")
 plt.ylim(1e-4, 1e-1)
 plt.xlabel("Step")
@@ -202,7 +202,7 @@ plt.close()
 
 # ---- Posterior variance over N omegas
 plt.figure(figsize=(6, 4))
-plt.plot(steps, var_list_N_mean, marker="o")
+plt.plot(steps, var_list_N_mean)
 plt.xlabel("Step")
 plt.ylabel(f"Posterior variance over {N_OMEGAS} omegas")
 plt.title("Posterior collapse during experiment")
@@ -213,7 +213,7 @@ plt.close()
 
 # ---- Posterior variance
 plt.figure(figsize=(6, 4))
-plt.plot(steps, var_list, marker="o")
+plt.plot(steps, var_list)
 plt.xlabel("Step")
 plt.ylabel("Posterior variance")
 plt.title("Posterior collapse during experiment")
@@ -224,7 +224,7 @@ plt.close()
 
 # ---- ESS
 plt.figure(figsize=(6, 4))
-plt.plot(steps, ess_list, marker="o")
+plt.plot(steps, ess_list)
 plt.xlabel("Step")
 plt.ylabel("ESS")
 plt.title("Effective Sample Size during episode")
@@ -235,7 +235,7 @@ plt.close()
 
 # ---- Posterior mean
 plt.figure(figsize=(6, 4))
-plt.plot(steps, mean_list, marker="o", label="posterior mean")
+plt.plot(steps, mean_list, label="posterior mean")
 plt.axhline(TRUE_OMEGA, color="k", linestyle="--", label="true ω")
 plt.xlabel("Step")
 plt.ylabel("ω")
@@ -247,7 +247,7 @@ plt.savefig(run_dir / "posterior_mean.png")
 plt.close()
 
 plt.figure(figsize=(6, 4))
-plt.plot(steps, reward_per_step, marker="o")
+plt.plot(steps, reward_per_step)
 plt.xlabel("Episode step")
 plt.ylabel("Reward (variance reduction)")
 plt.title("Reward vs episode step")
