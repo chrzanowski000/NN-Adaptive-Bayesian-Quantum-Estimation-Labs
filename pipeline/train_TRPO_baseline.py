@@ -292,7 +292,7 @@ def evaluate_episode(model, env):
 # ==========================================
 # TRAINING
 # ==========================================
-with mlflow.start_run(log_system_metrics=True):
+with mlflow.start_run(log_system_metrics=False):
     log_system_static(DEVICE)
     mlflow.set_tags(project_tags)
 
