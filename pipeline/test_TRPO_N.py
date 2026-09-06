@@ -236,7 +236,6 @@ plt.close()
 # ---- Posterior mean
 plt.figure(figsize=(6, 4))
 plt.plot(steps, mean_list, label="posterior mean")
-plt.axhline(TRUE_OMEGA, color="k", linestyle="--", label="true ω")
 plt.xlabel("Step")
 plt.ylabel("ω")
 plt.title("Posterior mean convergence")

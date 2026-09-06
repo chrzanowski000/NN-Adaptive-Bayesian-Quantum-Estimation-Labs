@@ -28,7 +28,7 @@ def measure(true_omega, t, rng=None):
 
 import torch
 
-FIXED_T2 = 100.0
+FIXED_T2 = 10.0
 
 
 def measure_batched(omegas, t, rng=None):
