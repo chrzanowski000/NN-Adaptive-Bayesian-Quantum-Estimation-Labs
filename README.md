@@ -27,6 +27,7 @@ gradient-free evolutionary search (CEM), following the approach of Fiderer, Schu
   - [CEM, end to end](#cem-end-to-end)
   - [Baselines (no training)](#baselines-no-training)
 - [Experiment tracking](#experiment-tracking)
+- [Baseline results](#baseline-results)
 - [Known issues and gotchas](#known-issues-and-gotchas)
 
 ---
@@ -595,6 +596,81 @@ sqlite3 -readonly mlflow.db \
 
 ---
 
+---
+
+## Baseline results
+
+Every method run through identical SMC and measurement code via
+`pipeline/evaluate.py`. **2048 true $\omega$, 125 measurements, 2000 particles,
+seed 42, $T_2 = 10$** — the same $\omega$ list for every method, so the
+comparison is paired. Prior variance is $1/12 = 0.0833$.
+
+| method | median final var | mean | p10 | p90 | median $t$ | max $t$ |
+|---|---|---|---|---|---|---|
+| **fixed $t = 0.5$** | **4.09e-04** | 4.30e-04 | 3.05e-04 | 5.80e-04 | 0.50 | 0.5 |
+| **fixed $t = 1$** | **4.33e-04** | 4.59e-04 | 2.98e-04 | 6.56e-04 | 1.00 | 1.0 |
+| exponential sweep ($0.1 \cdot 1.05^k$) | 1.75e-03 | 2.04e-03 | 1.06e-03 | 3.24e-03 | 2.06 | 42.4 |
+| **TRPO (learned)** | **2.03e-03** | 2.79e-03 | 9.26e-04 | 5.48e-03 | 0.75 | 4.1 |
+| PGH (capped at 2) | 2.03e-03 | 2.04e-03 | 9.41e-04 | 3.09e-03 | 2.00 | 2.0 |
+| fixed $t = 2$ | 2.06e-03 | 2.07e-03 | 9.74e-04 | 3.10e-03 | 2.00 | 2.0 |
+| PGH (capped at $T_2$) | 3.72e-03 | 8.39e-03 | 1.44e-03 | 1.98e-02 | 10.00 | 10.0 |
+| PGH (uncapped) | 5.19e-03 | 8.63e-03 | 2.46e-03 | 1.61e-02 | 11.44 | 3000.0 |
+| $1/\sigma$ | 8.86e-03 | 1.31e-02 | 2.99e-03 | 2.92e-02 | 8.85 | 26.3 |
+| fixed $t = 10$ | 8.02e-02 | 8.08e-02 | 6.76e-02 | 9.48e-02 | 10.00 | 10.0 |
+| random $t \sim U(0.1, 3000)$ | 8.29e-02 | 8.07e-02 | 6.28e-02 | 8.71e-02 | 1502 | 3000.0 |
+
+Reproduce with:
+
+```bash
+for spec in "fixed --fixed-t 0.5" "fixed --fixed-t 1.0" "pgh" "random"; do
+    python -m pipeline.evaluate --policy $spec --n-omegas 2048 --seed 42
+done
+python -m pipeline.evaluate --policy trpo \
+    --checkpoint artifacts/trpo_sb3_policy.zip --n-omegas 2048 --seed 42
+```
+
+### What this says
+
+**1. The learned policy loses to a constant.** TRPO lands mid-table at 2.03e-03
+while a constant $t = 1$ reaches 4.33e-04. Because every method saw the identical
+$\omega$ list, the comparison can be made per-$\omega$: **fixed $t = 1$ beats TRPO
+on 99.85% of the 2048 frequencies.** This is not sampling noise. TRPO also has by
+far the widest spread of any adaptive method (p10 9.26e-04 to p90 5.48e-03),
+which is the signature of an unstable policy rather than a merely suboptimal one
+— **35.6% of its actions sit exactly on the $t = 0.1$ floor**, in consecutive
+stretches with a median length of 22 measurements, visible as flat runs in
+`predicted_t.png`.
+
+Note this is the best *loadable* checkpoint (run `caaabcb8`, 1000 episodes). The
+68-hour run reached a 3× better training metric but its weights were lost
+(gotcha 7), so this comparison cannot speak for a fully trained policy.
+
+**2. Large $t$ is catastrophic, and that part is well understood.** Constant
+$t = 10$ (8.02e-02) barely improves on the prior (0.0833) despite sitting exactly
+at the Fisher-information optimum $t = T_2$. The reason is phase ambiguity: the
+likelihood depends on $\omega$ only through $\cos(\omega t)$, and over the prior
+support $\Delta\omega = 1$ the fringe wraps once $t > 2\pi \approx 6.28$. Every
+measurement is then consistent with several well-separated $\omega$, the posterior
+goes multimodal, and the filter cannot resolve it. **Maximising single-shot Fisher
+information is exactly the wrong objective while the prior is broad** — which is
+precisely the tension the [physics section](#the-competing-constraint-phase-ambiguity)
+describes, and the reason PGH and $1/\sigma$, which both drive $t$ into the
+aliasing regime, do poorly here.
+
+**3. Adaptivity buys nothing in this configuration, which is itself suspicious.**
+The best strategies are the two that never adapt at all. After 125 shots at
+$t = 1$ the posterior has $\sigma \approx 0.021$, so the aliasing-safe bound has
+risen to $t < 2\pi/\sigma \approx 300$ — an adaptive schedule *should* be able to
+exploit that and beat any constant by a wide margin. None does. That points at
+the setup rather than at adaptivity: the reward goes numerically dead after ~20
+measurements (gotcha 4), so there is almost no gradient signal for the late-episode
+behaviour where growing $t$ would pay off.
+
+One caveat on the fine ordering: $t = 0.5$ edging out $t = 1$, and both beating
+$t = 2$, is *not* explained by aliasing — all three are well inside the
+unambiguous regime. Liu–West jitter and the aggressive $0.75N$ resample trigger
+are the likely culprits, but this has not been isolated.
+
 ## Known issues and gotchas
 
 These are real and worth reading before trusting any number out of this repo.
@@ -679,14 +755,14 @@ functionality. `utils/cov.py:posterior_cov_trace` is unused and would raise
 no `forward()` — which means archived checkpoints trained with that class (some
 older MLflow runs) can no longer be executed.
 
-### 10. Preliminary observation, not yet a validated result
+### 10. The shipped TRPO policy is beaten by a one-line constant baseline
 
-A single 256-$\omega$ scan of the loadable TRPO policy against the baselines showed
-the policy settling on $t \approx 0.18$ and being **beaten by a constant $t = 1$**
-(final variance 7.8e-4 vs 4.5e-4), while constant $t = 10$ barely improved on the
-prior — the phase-aliasing effect described above. This was one run at one seed
-and has **not** been repeated with proper statistics; treat it as a hypothesis
-about undertraining and reward shaping (gotcha 4), not a finding.
+Measured, not conjectured — see [Baseline results](#baseline-results). A
+constant $t = 1$ reaches a **4.7× lower** median final posterior variance than
+the trained policy, and wins on 99.85% of individual $\omega$ values. Until that gap is closed,
+no claim that the learned heuristic is doing something useful is supportable.
+The likely causes are documented above: reward shaping (gotcha 4) and
+observation scaling (gotcha 3).
 
 ---
 
