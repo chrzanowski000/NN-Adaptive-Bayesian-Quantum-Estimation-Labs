@@ -38,7 +38,7 @@ def _env(name, default, cast=int):
 RESAMPLE_FN = resample_liu_west
 # RESAMPLE_FN = resample
 
-N_PARTICLES = _env("N_PARTICLES", 10000)
+N_PARTICLES = _env("N_PARTICLES", 2000)
 EPISODE_LEN = _env("EPISODE_LEN", 100)
 HISTORY_SIZE = _env("HISTORY_SIZE", 30)
 RANDOM_SEED = _env("RANDOM_SEED", 50)
