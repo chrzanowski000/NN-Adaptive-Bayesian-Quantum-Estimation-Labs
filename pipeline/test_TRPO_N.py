@@ -1,3 +1,12 @@
+import os
+
+
+def _env(name, default, cast=int):
+    """Allow the headline knobs to be set from the shell without editing code."""
+    raw = os.environ.get(name)
+    return default if raw is None else cast(raw)
+
+
 import json
 import re
 from pathlib import Path
@@ -17,15 +26,16 @@ from modules.rollout_sb3 import rollout  # your UPDATED rollout
 # CONFIG
 # ============================================================
 
-RUN_ID = "043c5ba57da047c8904425713319ca5e"
+# Defaults to the 10^7-timestep run trained 2026-09-06 (experiment 5).
+RUN_ID = os.environ.get("RUN_ID", "4719c7110da84264ba7bf622161f1545")
 MODEL_NAME = "trpo_sb3_policy.zip"
 RESAMPLE_FN = resample_liu_west
 
 # TRUE_OMEGA = 0.2
-N_PARTICLES = 2000
-EPISODE_LEN = 125
+N_PARTICLES = _env("N_PARTICLES", 2000)
+EPISODE_LEN = _env("EPISODE_LEN", 125)
 HISTORY_SIZE = 30
-N_OMEGAS = 10000
+N_OMEGAS = _env("N_OMEGAS", 10000)
 
 SEED = 42
 np.random.seed(SEED)
@@ -60,7 +70,11 @@ def get_next_run_dir(base_dir="validation"):
 # ============================================================
 
 # ==========================================
-mlflow.set_tracking_uri("file:///home/chrzanowski/mlflow_tracking")
+mlflow.set_tracking_uri(
+    os.environ.get(
+        "MLFLOW_TRACKING_URI", "sqlite:///" + os.path.abspath("mlflow.db")
+    )
+)
 mlflow.set_experiment("fiderer / omega_estimation / trpo")
 
 model_uri = f"runs:/{RUN_ID}/{MODEL_NAME}"
@@ -125,6 +139,9 @@ for TRUE_OMEGA in tqdm(TRUE_OMEGAS_LIST):
 # ============================================================
 
 print(var_list_N.shape)
+# Column 0 is the all-zero array this matrix was seeded with; including it
+# biases every mean low by a factor N/(N+1).
+var_list_N = var_list_N[:, 1:]
 var_list_N_mean = np.mean(var_list_N, axis=1)
 
 episode_summary = {

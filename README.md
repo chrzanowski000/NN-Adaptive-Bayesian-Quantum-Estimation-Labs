@@ -36,6 +36,7 @@ MLflow runs are tagged `project: fiderer`.
   - [Baselines (no training)](#baselines-no-training)
 - [Experiment tracking](#experiment-tracking)
 - [Baseline results](#baseline-results)
+- [Validation over 10 000 omega](#validation-over-10-000-omega-the-n-scripts)
 - [Divergences from Fiderer et al.](#divergences-from-fiderer-et-al)
 - [Known issues and gotchas](#known-issues-and-gotchas)
 
@@ -723,6 +724,109 @@ are the likely culprits, but this has not been isolated.
 
 ---
 
+---
+
+## Validation over 10 000 $\omega$ (the N-scripts)
+
+Both retrained networks, evaluated with the repository's own multi-$\omega$ test
+harnesses — `pipeline/test_TRPO_N.py` and `pipeline/test_CEM_N.py`. These use
+the NumPy/float64 rollout (`modules/rollout_sb3.py`, `modules/rollout.py`), one
+$\omega$ at a time, and are the **reference implementation**: 10 000 true
+$\omega$, 125 measurements, 2000 particles, Liu–West resampling.
+
+The $\omega$ draw here is independent of the training draw, which is what you
+want — these are genuinely held-out frequencies.
+
+| | TRPO | CEM |
+|---|---|---|
+| training | 100 002 episodes, $10^7$ timesteps, 2 h 24 m | 99 generations × 1000 pop, 54 min |
+| MLflow run | `4719c711` (exp 5) | `bf4ad6ae` (exp 4) |
+| **Bayes risk over 10 000 $\omega$** | **2.173e-03** | **2.137e-03** |
+| mean $t$ | 4.00 | 6.67 |
+| min / max $t$ | 0.10 / 9.85 | 2.16 / 15.60 |
+| final ESS (of 2000) | 1960 | 1904 |
+
+The two methods land in a **statistical tie** (2.17e-03 vs 2.14e-03, a 2%
+difference) despite completely different optimisers and very different chosen
+times — CEM settles on interrogation times roughly 1.7× longer than TRPO's, and
+never goes below $t = 2.16$, where TRPO ranges down to the action floor.
+
+Reproduce:
+
+```bash
+python -m pipeline.test_TRPO_N     # defaults to run 4719c711
+python -m pipeline.test_CEM_N      # defaults to run bf4ad6ae
+# override with e.g.  RUN_ID=<id> N_OMEGAS=1000 python -m pipeline.test_TRPO_N
+```
+
+### Posterior collapse
+
+Mean posterior variance across all 10 000 $\omega$, log scale. Both fall about
+1.6 decades from the prior's 0.0833 and flatten out well before the 125th
+measurement — the information-starved regime described above.
+
+| TRPO | CEM |
+|---|---|
+| ![TRPO posterior collapse](docs/figures/trpo_posterior_variance_over_omega_log.png) | ![CEM posterior collapse](docs/figures/cem_posterior_variance_over_omega_log.png) |
+
+### Chosen interrogation time
+
+A single representative episode. This is where the two methods differ most.
+
+| TRPO | CEM |
+|---|---|
+| ![TRPO chosen t](docs/figures/trpo_predicted_t.png) | ![CEM chosen t](docs/figures/cem_predicted_t.png) |
+
+TRPO oscillates hard between roughly 1 and 7, spiking to ~10 in the opening
+measurements and never settling. CEM is smoother and biased higher. Neither
+shows the monotone growth in $t$ that the $\sigma^{-1}$/PGH analysis says an
+optimal adaptive policy should produce as the posterior narrows — both are
+essentially oscillating around a fixed operating point, which is consistent
+with the constant-$t$ baselines being hard to beat.
+
+Note that both spend time above $t = 2\pi \approx 6.28$, where the fringe
+aliases over the prior support. That is safe once the posterior is narrow, but
+TRPO's early spike to $t \approx 10$ happens while the posterior is still wide.
+
+### Effective sample size
+
+| TRPO | CEM |
+|---|---|
+| ![TRPO ESS](docs/figures/trpo_ess.png) | ![CEM ESS](docs/figures/cem_ess.png) |
+
+ESS stays high (~1900–1960 of 2000) for both, sawtoothing against the $0.75N = 1500$
+resample trigger. The particle filter is healthy; it is not the
+bottleneck.
+
+### A caveat on the earlier baseline table
+
+The [Baseline results](#baseline-results) table above was produced with
+`modules/rollout_generic.py`, the batched Torch harness — **not** this NumPy
+reference path. Cross-checking the two on the same model and the same $\omega$
+exposed a defect in the batched harness:
+
+| harness | mean | median | max | episodes diverging (>1e-2) |
+|---|---|---|---|---|
+| `rollout_sb3` (NumPy, float64) | 2.18e-03 | 1.97e-03 | 7.7e-03 | **0 of 1000** |
+| `rollout_generic` (Torch, float32) | 6.9e-03 | 2.31e-03 | 4.8e-01 | **5–8%** |
+
+In the failing episodes the particle cloud migrates onto a phase alias outside
+the prior support (final range e.g. `[0.34, 1.55]`, 99% of particles outside
+$[0,1]$) and the posterior variance ends up *larger* than the prior's — which is
+impossible for a correct filter.
+
+What has been established: the two filters agree to within 20% when fed
+identical $(t, d)$ sequences, so the update and resampling code is equivalent;
+batching is **not** the cause (B=1 with independent seeds diverges at the same
+rate as B=128); and moving the batched path to float64 halves the divergence
+rate (4.7% → 2.0%) without eliminating it. The root cause is not yet pinned
+down.
+
+**Consequence:** the *median* column of the baseline table is sound — the two
+harnesses agree there — but the *mean* column is inflated for every method that
+drives $t$ into the aliasing regime. Treat the medians as the ranking and
+regard the means as upper bounds pending a re-run through the NumPy path.
+
 ## Divergences from Fiderer et al.
 
 The equations in this repo match the paper. The *setup* around them does not,
@@ -932,6 +1036,22 @@ instead of 1 (gotcha 4), and no resource counter in the observation (gotcha 3).
 The comparison also uses the best *loadable* checkpoint, which trained for 1000
 episodes; the 68-hour run scored 3× better before losing its weights
 (gotcha 7).
+
+### 11. `rollout_generic.py` diverges on a few percent of episodes
+
+The batched Torch harness added for `pipeline/evaluate.py` produces catastrophic
+filter failures at a rate of 5–8%, where the NumPy reference
+(`modules/rollout_sb3.py`, used by the N-scripts) produces **none in 1000**. In
+a failing episode the particle cloud locks onto a phase alias outside $[0,1]$
+and the final variance exceeds the prior's.
+
+Established so far: both filters agree when fed identical $(t, d)$ sequences;
+batching is not the cause; float64 halves the rate but does not remove it. Root
+cause still open — see
+[the caveat above](#a-caveat-on-the-earlier-baseline-table).
+
+Until this is fixed, prefer `pipeline/test_TRPO_N.py` / `test_CEM_N.py` for any
+number that matters, and read `pipeline/evaluate.py` medians rather than means.
 
 ---
 
