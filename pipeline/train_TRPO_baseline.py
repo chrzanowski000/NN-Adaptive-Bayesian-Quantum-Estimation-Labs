@@ -25,25 +25,39 @@ from modules.rewards import posterior_variance
 from modules.simulation import FIXED_T2, measure
 from utils.git_utils.git import get_git_branch, get_git_commit, git_is_dirty
 
+def _env(name, default, cast=int):
+    """Allow every headline hyperparameter to be overridden from the shell.
+
+    Lets the same script serve a 30-second smoke test and a multi-hour run
+    without editing constants:  N_PARTICLES=100 EPISODE_LEN=5 python -m ...
+    """
+    raw = os.environ.get(name)
+    return default if raw is None else cast(raw)
+
 # ================= CONFIG =================
 RESAMPLE_FN = resample_liu_west
 # RESAMPLE_FN = resample
 
-N_PARTICLES = 10000
-EPISODE_LEN = 100
-HISTORY_SIZE = 30
-RANDOM_SEED = 50
+N_PARTICLES = _env("N_PARTICLES", 10000)
+EPISODE_LEN = _env("EPISODE_LEN", 100)
+HISTORY_SIZE = _env("HISTORY_SIZE", 30)
+RANDOM_SEED = _env("RANDOM_SEED", 50)
 
-N_TRAIN_EPISODES = int(10e4)
+N_TRAIN_EPISODES = _env("N_TRAIN_EPISODES", int(10e4))
 TOTAL_TIMESTEPS = N_TRAIN_EPISODES * EPISODE_LEN
 
 GAMMA = 0.99
 GAE_LAMBDA = 0.95
 TARGET_KL = 1e-2
 
-PLOT_COUNT = 100
+PLOT_COUNT = _env("PLOT_COUNT", 100)
 T_MIN = 0.1
 T_MAX = 3000.0
+
+# Periodic checkpointing. The previous version saved the policy only after
+# learn() returned, so the 68 h run that crashed mid-training lost its weights.
+CHECKPOINT_EVERY_STEPS = _env("CHECKPOINT_EVERY_STEPS", 50_000)
+CHECKPOINT_DIR = os.path.join("artifacts", "checkpoints")
 
 policy_kwargs = dict(
     net_arch=[256, 256],
@@ -53,13 +67,20 @@ np.random.seed(RANDOM_SEED)
 TRUE_OMEGAS_LIST = np.random.uniform(0.0, 1.0, size=N_TRAIN_EPISODES)
 
 # device setup
-DEVICE = "cpu"  # or "cuda"
+DEVICE = os.environ.get("DEVICE", "cpu")  # or "cuda"
 if DEVICE == "cuda" and not torch.cuda.is_available():
     raise RuntimeError("CUDA requested but not available.")
 project_tags = {"project": "fiderer", "algo": "trpo", "env": "sequential_montecarlo"}
 
 # ==========================================
-mlflow.set_tracking_uri("file:///home/chrzanowski/mlflow_tracking")
+# Tracking store. Defaults to the repo-local sqlite backend (which already holds
+# every historical run); override with MLFLOW_TRACKING_URI to point at a server
+# or at the original file store on the training box.
+MLFLOW_TRACKING_URI = os.environ.get(
+    "MLFLOW_TRACKING_URI",
+    "sqlite:///" + os.path.abspath("mlflow.db"),
+)
+mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
 mlflow.set_experiment("fiderer / omega_estimation / trpo")
 os.makedirs("artifacts", exist_ok=True)
 
@@ -133,12 +154,19 @@ class MlflowEpisodeCallback(BaseCallback):
             idx = self.episode_idx
             self.episode_idx += 1
 
-            mlflow.log_metric("mean_reward", info["reward_total"], step=idx)
-            mlflow.log_metric("mean_init_var", info["initial_var"], step=idx)
-            mlflow.log_metric("mean_final_var", info["final_var"], step=idx)
-            mlflow.log_metric("mean_ess", info["final_ess"], step=idx)
-            mlflow.log_metric("mean_t", info["mean_t"], step=idx)
-            mlflow.log_metric("true_omega", info["true_omega"], step=idx)
+            # One batched call instead of six round-trips: at 10^5+ episodes
+            # the per-metric overhead dominated wall-clock.
+            mlflow.log_metrics(
+                {
+                    "mean_reward": info["reward_total"],
+                    "mean_init_var": info["initial_var"],
+                    "mean_final_var": info["final_var"],
+                    "mean_ess": info["final_ess"],
+                    "mean_t": info["mean_t"],
+                    "true_omega": info["true_omega"],
+                },
+                step=idx,
+            )
             self.last_episode_info = info
 
         while (
@@ -154,6 +182,43 @@ class MlflowEpisodeCallback(BaseCallback):
     def _on_training_end(self) -> None:
         while self.last_episode_info is not None and self.plot_idx < self.plot_count:
             self._log_posterior_plot(self.last_episode_info)
+
+
+# ==========================================
+class CheckpointCallback(BaseCallback):
+    """Save the policy every `save_every` timesteps.
+
+    Keeps a rolling `trpo_sb3_policy_latest.zip` plus a numbered history, so a
+    crashed or interrupted run is always resumable from the last checkpoint.
+    """
+
+    def __init__(self, save_every, checkpoint_dir, verbose=0):
+        super().__init__(verbose)
+        self.save_every = int(save_every)
+        self.checkpoint_dir = checkpoint_dir
+        self.next_save_step = self.save_every
+        os.makedirs(self.checkpoint_dir, exist_ok=True)
+
+    def save_now(self, tag=None):
+        tag = tag if tag is not None else f"step_{self.num_timesteps:09d}"
+        path = os.path.join(self.checkpoint_dir, f"trpo_{tag}")
+        self.model.save(path)
+        latest = os.path.join("artifacts", "trpo_sb3_policy_latest")
+        self.model.save(latest)
+        try:
+            mlflow.log_artifact(f"{path}.zip", artifact_path="checkpoints")
+            mlflow.log_artifact(f"{latest}.zip")
+        except Exception as exc:  # never let logging kill a training run
+            print(f"[checkpoint] mlflow upload failed: {exc}")
+        print(f"[checkpoint] saved {path}.zip at {self.num_timesteps} steps")
+        return f"{path}.zip"
+
+    def _on_step(self) -> bool:
+        if self.num_timesteps >= self.next_save_step:
+            self.save_now()
+            while self.next_save_step <= self.num_timesteps:
+                self.next_save_step += self.save_every
+        return True
 
 
 # ==========================================
@@ -310,6 +375,7 @@ with mlflow.start_run(log_system_metrics=False):
             "TARGET_KL": TARGET_KL,
             "GAMMA": GAMMA,
             "GAE_LAMBDA": GAE_LAMBDA,
+            "CHECKPOINT_EVERY_STEPS": CHECKPOINT_EVERY_STEPS,
             "policy_name": "MlpPolicy",
             "git_commit": get_git_commit(),
             "git_branch": get_git_branch(),
@@ -345,8 +411,21 @@ with mlflow.start_run(log_system_metrics=False):
         artifacts_dir="artifacts",
         plot_count=PLOT_COUNT,
     )
+    callback_ckpt = CheckpointCallback(
+        save_every=CHECKPOINT_EVERY_STEPS,
+        checkpoint_dir=CHECKPOINT_DIR,
+    )
 
-    model.learn(total_timesteps=TOTAL_TIMESTEPS, callback=[callback_model])
+    # Any exit path -- normal, crash, or Ctrl-C -- must leave usable weights on
+    # disk before it propagates.
+    try:
+        model.learn(
+            total_timesteps=TOTAL_TIMESTEPS,
+            callback=[callback_model, callback_ckpt],
+        )
+    except BaseException:
+        callback_ckpt.save_now(tag="interrupted")
+        raise
 
     model_path = os.path.join("artifacts", "trpo_sb3_policy")
     model.save(model_path)

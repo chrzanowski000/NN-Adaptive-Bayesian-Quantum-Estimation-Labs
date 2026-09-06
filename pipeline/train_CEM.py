@@ -15,22 +15,36 @@ from modules.rollout import rollout
 from modules.simulation import FIXED_T2
 from utils.git_utils.git import get_git_branch, get_git_commit, git_is_dirty
 
+def _env(name, default, cast=int):
+    """Allow every headline hyperparameter to be overridden from the shell.
+
+    Lets the same script serve a 30-second smoke test and a multi-hour run
+    without editing constants:  N_PARTICLES=100 EPISODE_LEN=5 python -m ...
+    """
+    raw = os.environ.get(name)
+    return default if raw is None else cast(raw)
+
 # ================= CONFIG =================
 POLICY = models.nn.TimePolicy_Fiderer_16  # choose network
 RESAMPLE_FN = resample_liu_west
 # RESAMPLE_FN = resample
 # POLICY = models.nn.TimePolicy_1
 
-N_PARTICLES = 2000
-EPISODE_LEN = 100
-CEM_POP = 1000
-CEM_ELITE_FRAC = 0.1
-CEM_INIT_STD = 1.0
-CEM_GENERATIONS = 100
-HISTORY_SIZE = 30  # size od time array passed to networks (input_dim=HISTORY_SIZE+2)
-RANDOM_SEED = 50
+N_PARTICLES = _env("N_PARTICLES", 2000)
+EPISODE_LEN = _env("EPISODE_LEN", 100)
+CEM_POP = _env("CEM_POP", 1000)
+CEM_ELITE_FRAC = _env("CEM_ELITE_FRAC", 0.1, float)
+CEM_INIT_STD = _env("CEM_INIT_STD", 1.0, float)
+CEM_GENERATIONS = _env("CEM_GENERATIONS", 100)
+HISTORY_SIZE = _env("HISTORY_SIZE", 30)  # input_dim = HISTORY_SIZE + 2
+RANDOM_SEED = _env("RANDOM_SEED", 50)
+
+CHECKPOINT_EVERY_GENS = _env("CHECKPOINT_EVERY_GENS", 5)
+CHECKPOINT_DIR = os.path.join("artifacts", "checkpoints")
 
 np.random.seed(RANDOM_SEED)  # seed for omegas generation
+torch.manual_seed(RANDOM_SEED)  # CEM population sampling
+EPISODE_RNG = np.random.default_rng(RANDOM_SEED)  # measurement outcomes
 TRUE_OMEGAS_LIST = np.random.uniform(
     0.0, 1.0, size=CEM_GENERATIONS
 )  # generate list of random omegas
@@ -38,14 +52,19 @@ TRUE_OMEGAS_LIST = np.random.uniform(
 
 # ==========================================
 
-mlflow.set_tracking_uri("file:///home/chrzanowski/mlflow_tracking")
-mlflow.set_experiment("fiderer / omega_estimation / trpo")
+MLFLOW_TRACKING_URI = os.environ.get(
+    "MLFLOW_TRACKING_URI",
+    "sqlite:///" + os.path.abspath("mlflow.db"),
+)
+mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+# CEM used to log into the experiment literally named ".../ trpo", which made
+# the two methods indistinguishable in the UI.
+mlflow.set_experiment("fiderer / omega_estimation / cem")
 
-with mlflow.start_run():
-    mlflow.set_tags(
-        {"project": "fiderer", "algo": "trpo", "env": "sequential_montecarlo"}
-    )
+project_tags = {"project": "fiderer", "algo": "cem", "env": "sequential_montecarlo"}
+
 os.makedirs("artifacts", exist_ok=True)
+os.makedirs(CHECKPOINT_DIR, exist_ok=True)
 
 
 def log_system_static():
@@ -70,7 +89,39 @@ def log_system_static():
         )
 
 
+def save_checkpoint(cem, tag):
+    """Persist the current CEM mean as a loadable policy state_dict."""
+    model = cem.policy_model
+    idx = 0
+    for prm in model.parameters():
+        n = prm.numel()
+        prm.data.copy_(cem.mu[idx : idx + n].view_as(prm))
+        idx += n
+    path = os.path.join(CHECKPOINT_DIR, f"cem_{tag}.pt")
+    torch.save(
+        {
+            "state_dict": model.state_dict(),
+            "mu": cem.mu,
+            "sigma": cem.sigma,
+            "policy_name": POLICY.__name__,
+            "history_size": HISTORY_SIZE,
+        },
+        path,
+    )
+    latest = os.path.join("artifacts", "cem_policy_latest.pt")
+    torch.save(torch.load(path, weights_only=True), latest)
+    try:
+        mlflow.log_artifact(path, artifact_path="checkpoints")
+        mlflow.log_artifact(latest)
+    except Exception as exc:
+        print(f"[checkpoint] mlflow upload failed: {exc}")
+    return path
+
+
 with mlflow.start_run():
+    mlflow.set_tags(project_tags)
+    log_system_static()
+
     mlflow.log_params(
         {
             "N_PARTICLES": N_PARTICLES,
@@ -84,6 +135,8 @@ with mlflow.start_run():
             "policy_name": POLICY.__name__,
             "resample_function": RESAMPLE_FN.__name__,
             "RANDOM_SEED": RANDOM_SEED,
+            "CEM_GENERATIONS": CEM_GENERATIONS,
+            "CHECKPOINT_EVERY_GENS": CHECKPOINT_EVERY_GENS,
             # --- git ---
             "git_commit": get_git_commit(),
             "git_branch": get_git_branch(),
@@ -105,6 +158,7 @@ with mlflow.start_run():
                 N_PARTICLES,
                 EPISODE_LEN,
                 HISTORY_SIZE,
+                rng=EPISODE_RNG,
             ),
             debug=True,
         )
@@ -119,15 +173,20 @@ with mlflow.start_run():
         mean_t = np.mean([s["mean_t"] for s in stats])
 
         # ---- metrics ----
-        mlflow.log_metric("mean_reward", mean_r, step=gen)
-        mlflow.log_metric("max_reward", max_r, step=gen)
-        mlflow.log_metric("sigma_mean", cem.sigma.mean().item(), step=gen)
-        mlflow.log_metric("mu_norm", torch.norm(cem.mu).item(), step=gen)
-        mlflow.log_metric("mean_init_var", mean_init_var, step=gen)
-        mlflow.log_metric("mean_final_var", mean_final_var, step=gen)
-        mlflow.log_metric("mean_ess", mean_ess, step=gen)
-        mlflow.log_metric("mean_t", mean_t, step=gen)
-        mlflow.log_metric("true_omega", TRUE_OMEGA, step=gen)
+        mlflow.log_metrics(
+            {
+                "mean_reward": float(mean_r),
+                "max_reward": float(max_r),
+                "sigma_mean": cem.sigma.mean().item(),
+                "mu_norm": torch.norm(cem.mu).item(),
+                "mean_init_var": float(mean_init_var),
+                "mean_final_var": float(mean_final_var),
+                "mean_ess": float(mean_ess),
+                "mean_t": float(mean_t),
+                "true_omega": float(TRUE_OMEGA),
+            },
+            step=gen,
+        )
 
         if gen % 5 == 0:
             ###----
@@ -143,6 +202,7 @@ with mlflow.start_run():
                 N_PARTICLES,
                 EPISODE_LEN,
                 HISTORY_SIZE,
+                rng=EPISODE_RNG,
             )
 
             ### get metrics fror histograms
@@ -172,15 +232,16 @@ with mlflow.start_run():
 
             mlflow.log_artifact(os.path.join("artifacts", fname))
 
+        if gen % CHECKPOINT_EVERY_GENS == 0 or gen == CEM_GENERATIONS - 1:
+            save_checkpoint(cem, f"gen_{gen:04d}")
+
             # print(f"gen {gen:02d} | mean R = {mean_r:.3e} | max R = {max_r:.3e}")
 
-    # ---- save final policy ---- #i thing it does something wrong #to correct later
+    # ---- save final policy ----
+    # save_checkpoint copies cem.mu into the model before serialising, so the
+    # saved weights are the CEM mean, not the last sampled population member.
+    save_checkpoint(cem, "final")
     final_policy = cem.policy_model
-    idx = 0
-    for p in final_policy.parameters():
-        n = p.numel()
-        p.data.copy_(cem.mu[idx : idx + n].view_as(p))
-        idx += n
 
     mlflow.pytorch.log_model(final_policy, name="policy")
     print("policy model saved")

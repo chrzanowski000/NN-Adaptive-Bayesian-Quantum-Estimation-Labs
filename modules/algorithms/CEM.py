@@ -13,7 +13,9 @@ class CEM:
         self.sigma = torch.ones(self.dim) * init_std
 
         self.pop = pop_size
-        self.elite = int(pop_size * elite_frac)
+        # int() alone rounds down to 0 for small populations, which makes the
+        # elite set empty and turns mu/sigma into NaN on the first update.
+        self.elite = max(1, int(pop_size * elite_frac))
         self.policy_model = policy_cls(history_size)
 
 

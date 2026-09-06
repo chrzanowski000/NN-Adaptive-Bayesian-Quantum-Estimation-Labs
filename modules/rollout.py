@@ -16,7 +16,14 @@ def rollout(
     N_PARTICLES,
     EPISODE_LEN,
     HISTORY_SIZE,
+    rng=None,
     ):
+    # One generator per episode. Previously measure() was called with no rng, so
+    # numpy built a fresh default_rng() from OS entropy on every single shot --
+    # ~10M generator constructions per CEM run, and RANDOM_SEED had no effect.
+    if rng is None:
+        rng = np.random.default_rng()
+
     t_history_len=HISTORY_SIZE
     t_history = deque(maxlen=t_history_len)
     for _ in range(t_history_len):
@@ -56,10 +63,13 @@ def rollout(
                             [mean, var] + list(t_history),
                             dtype=torch.float32
                             )
-        t = policy(state).item()
+        # No gradients are ever taken through the policy here -- CEM is
+        # gradient-free -- so building the autograd graph is pure waste.
+        with torch.no_grad():
+            t = policy(state).item()
         t_list.append(t)
         t_history.append(t)
-        d = measure(TRUE_OMEGA, t)
+        d = measure(TRUE_OMEGA, t, rng=rng)
 
         particles, logw = smc_update_no_resample(
             particles, logw, d, t
@@ -77,7 +87,7 @@ def rollout(
         "reward": initial_var - final_var,
         "final_ess": ess(logw),
         "logw": logw,
-        "mean_t": float(np.mean(t_history)),
+        "mean_t": float(np.mean(t_list)),
         "particles": particles,
 
         # ---- trajectories per episode
