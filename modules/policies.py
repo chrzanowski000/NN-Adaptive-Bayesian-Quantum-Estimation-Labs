@@ -93,16 +93,24 @@ class CEMPolicy(Policy):
 
 
 class PGHPolicy(Policy):
-    """Particle Guess Heuristic (Wiebe & Granade).
+    """Particle Guess Heuristic (PGH).
 
-    Draw two particles from the posterior and set t = 1 / |w1 - w2|. The
-    interrogation time therefore tracks the inverse posterior width, which is
-    the locally optimal choice for a *coherent* Ramsey experiment: it keeps the
-    accumulated phase difference across the posterior at roughly one radian.
+    One of the two adaptive baselines in Fiderer et al.: draw two particles
+    from p(theta | D_{k-1}) and set
+
+        t_k = || theta_1 - theta_2 ||^{-1}
+
+    The interrogation time therefore tracks the inverse posterior width, which
+    keeps the accumulated phase difference across the posterior at roughly one
+    radian. The paper describes PGH as a faster proxy for the sigma^-1
+    heuristic that "introduces additional randomness" via the particle draw.
 
     With finite T2 this is asymptotically self-defeating -- as the posterior
     narrows, t grows past the coherence time and the fringe visibility
-    exp(-t/T2) kills the information content. `t_cap` is the standard fix.
+    exp(-t/T2) kills the information content. It can also settle into an
+    aliasing trap: at t ~ 1/sigma ~ 11 the fringe wraps over a Uniform(0,1)
+    prior, the posterior stays multimodal, sigma stays large, and t stays put.
+    `t_cap` breaks the loop and is the standard fix.
     """
 
     color = "#d62728"
@@ -130,10 +138,20 @@ class PGHPolicy(Policy):
 
 
 class SigmaInversePolicy(Policy):
-    """t = k / sigma, the deterministic cousin of PGH.
+    """The sigma^-1 heuristic: t = k / sigma.
 
-    Same 1/width scaling, but using the posterior standard deviation directly
-    instead of a two-particle sample, so it has no sampling jitter.
+    The other adaptive baseline in Fiderer et al., there defined for the
+    general multiparameter case as
+
+        t_k = tr[ Cov(theta | D_{k-1}) ]^{-1/2}
+
+    which for a single parameter is the inverse posterior standard deviation
+    (k = 1 here). Originally derived by Ferrie et al. for omega estimation
+    without decoherence (T2 -> infinity), where the paper notes it is optimal
+    "in the greedy sense and only in the asymptotic limit N -> infinity".
+
+    Same 1/width scaling as PGH but computed from the weighted moments rather
+    than a two-particle sample, so it carries no sampling jitter.
     """
 
     color = "#ff7f0e"
@@ -190,10 +208,16 @@ class RandomTPolicy(Policy):
 
 
 class ExponentialSweepPolicy(Policy):
-    """t_k = t0 * r^k, the classic open-loop phase-estimation ladder.
+    """t_k = t0 * r^k -- the exp-sparse heuristic.
 
+    Fiderer et al.'s non-adaptive baseline, there defined as t_k = (9/8)^k.
     Adaptive only in the trivial sense that it depends on the step index, not
     on the data. Included to separate "adaptivity helps" from "growing t helps".
+
+    NOTE: the defaults here (t0=0.1, r=1.05) are NOT the paper's (9/8)^k, so as
+    configured this is a slower ladder than the published exp-sparse heuristic.
+    The defaults are kept because the committed baseline results table was
+    measured with them; pass t0=1.0, r=1.125 to reproduce the paper's version.
     """
 
     color = "#e377c2"

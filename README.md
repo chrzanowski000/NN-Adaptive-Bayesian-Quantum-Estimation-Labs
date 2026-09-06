@@ -8,9 +8,17 @@ Ramsey frequency estimation. A sequential Monte Carlo filter maintains a posteri
 over the unknown Larmor frequency $\omega$; a policy reads that posterior and picks
 the interrogation time $t$ for the next shot; the measurement outcome sharpens the
 posterior; repeat. The policy is trained by reinforcement learning (TRPO) or by a
-gradient-free evolutionary search (CEM), following the approach of Fiderer, Schuff
-& Braun, *Neural-network heuristics for adaptive Bayesian quantum estimation*
-(PRX Quantum 2, 020303, 2021) — the MLflow runs are tagged `project: fiderer`.
+gradient-free evolutionary search (CEM), following Fiderer, Schuff & Braun,
+*Neural-network heuristics for adaptive Bayesian quantum estimation* — the
+MLflow runs are tagged `project: fiderer`.
+
+> **On the reference.** Equation numbers throughout this README refer to
+> `fiderer.pdf` in this repository, which is the preprint (dated 2020-03-05);
+> numbering may differ from the published version, PRX Quantum **2**, 020303
+> (2021). The physics below has been checked against that PDF equation by
+> equation. Where this implementation departs from the paper — and it does, in
+> ways that matter — it is catalogued under
+> [Divergences from Fiderer et al.](#divergences-from-fiderer-et-al)
 
 ---
 
@@ -28,6 +36,7 @@ gradient-free evolutionary search (CEM), following the approach of Fiderer, Schu
   - [Baselines (no training)](#baselines-no-training)
 - [Experiment tracking](#experiment-tracking)
 - [Baseline results](#baseline-results)
+- [Divergences from Fiderer et al.](#divergences-from-fiderer-et-al)
 - [Known issues and gotchas](#known-issues-and-gotchas)
 
 ---
@@ -92,49 +101,94 @@ and $T_2$ shares the units of $t$. With $\omega \lesssim 1$ and $T_2 = 10$, roug
 $\omega T_2 \lesssim 10$ radians of phase accumulate before coherence is lost, so a
 few fringes are resolvable within the coherence window.
 
-### Fisher information: why this problem is interesting
+### The figure of merit: Bayes risk
 
-Differentiating the likelihood gives the single-shot Fisher information
-(implemented for reference in `modules/policies.py:fisher_information`):
+This is a **Bayesian** estimation problem, and the quantity everything is judged
+by is the **Bayes risk** — Fiderer Eq. (1):
+
+$$
+r\bigl(h \mid p(\theta)\bigr) \;=\; \mathbb{E}_{D_k}\Bigl[\,\mathrm{tr}\,\mathrm{Cov}(\theta \mid D_k)\,\Bigr]
+$$
+
+where $h$ is the experiment-design heuristic, $D_k = (d_1,\dots,d_k)$ the
+measurement record, and smaller is better. It is the risk of the quadratic loss
+$L(\hat\theta_k, \theta) = \lVert\hat\theta_k - \theta\rVert_2^2$ under the Bayes
+estimator $\hat\theta_k(D_k) = \mathbb{E}[\theta \mid D_k]$ — that is, the
+posterior mean, which is exactly what this code reports as `posterior_mean`.
+
+For the single-parameter, experiment-limited case implemented here, the trace is
+over a $1\times1$ covariance and the expectation is estimated by averaging over
+true $\omega$ values. **So the Bayes risk is precisely the mean final posterior
+variance** that `pipeline/evaluate.py` prints as `final_variance_mean` and that
+the [Baseline results](#baseline-results) table ranks methods by. They are the
+same number; the paper's name for it is the Bayes risk.
+
+Note the framing: the paper is explicit that the *frequentist* route to
+experiment design goes "with the Cramér–Rao bound formalism by maximizing the
+quantum Fisher information", and it deliberately takes the Bayesian route
+instead. Fisher information is a useful sanity check here
+([below](#aside-why-long-interrogation-times-stop-helping)) but it is **not** the
+objective.
+
+### The reward
+
+The reward is the **reduction in traced posterior covariance** at each step —
+Fiderer Eq. (2), implemented at `modules/rewards.py:11-12` and inlined at
+`train_TRPO_baseline.py:300,317`:
+
+$$
+R(D_k) \;=\; \mathrm{tr}\,\mathrm{Cov}(\theta \mid D_{k-1}) \;-\; \mathrm{tr}\,\mathrm{Cov}(\theta \mid D_k)
+\;\;\xrightarrow{\;d=1\;}\;\; V_{k-1} - V_k
+$$
+
+with $V_k = \sum_i w_i(\omega_i - \bar\omega)^2$. This is not an arbitrary
+choice, and it is **not** a weaker substitute for an information-gain reward.
+The paper's reasoning: the negative Bayes risk is the obvious reward but is far
+too slow to compute inside a training loop, whereas Eq. (2) is cheap in the SMC
+framework *and* telescopes to it. Eq. (3), for $N$ experiments per episode:
+
+$$
+\mathbb{E}_{D_N}\Bigl[\textstyle\sum_{j=1}^{N} R(D_j)\Bigr] \;=\; \mathrm{const} \;-\; r\bigl(h \mid p(\theta)\bigr),
+\qquad \mathrm{const} = \mathrm{tr}\,\mathrm{Cov}(\theta)
+$$
+
+So maximising the episode return **provably minimises the Bayes risk** — but the
+identity holds only for an *undiscounted* return. The paper states this
+explicitly: "RL has the goal to maximize the expected discounted reward which
+equals the left-hand side of Eq. (3) **because we set the discount factor to
+one**." This repo sets $\gamma = 0.99$, which breaks it — see
+[gotcha 4](#4-gamma--099-breaks-the-bayes-risk-identity).
+
+### Aside: why long interrogation times stop helping
+
+Not part of the paper's framework — included because it explains the shape of
+the results. Differentiating the likelihood gives the single-shot Fisher
+information (`modules/policies.py:fisher_information`):
 
 $$
 I(\omega; t) \;=\; \frac{(\partial_\omega p_0)^2}{p_0(1-p_0)} \;=\; \frac{t^2\,v^2\sin^2(\omega t)}{1 - v^2\cos^2(\omega t)},
 \qquad v = e^{-t/T_2}
 $$
 
-Two regimes fall out of this, and the tension between them is the whole design
-problem:
+Without decoherence ($v \to 1$) this is just $I = t^2$: information grows
+quadratically in interrogation time, which is why longer is better and why
+adaptive schemes that grow $t$ pay off. With finite $T_2$ the envelope
+$t^2 e^{-2t/T_2}$ peaks at $t = T_2$, so information per shot is **bounded** at
+$I_{\max} \approx 0.135\,T_2^2$. Numerically, for $T_2 = 10$ the optimum sits at
+$t^\star \approx 8.4$–$9.5$ depending on $\omega$ (`optimal_t_grid`).
 
-**Without decoherence** ($T_2 \to \infty$, $v \to 1$) this collapses to $I = t^2$.
-Information grows *quadratically* in interrogation time. Splitting a total resource
-time $T$ optimally then yields $\mathrm{Var}(\omega) \propto 1/T^2$ — **Heisenberg
-scaling** — instead of the $1/T$ **standard quantum limit** of non-adaptive
-strategies. This quadratic gain is the entire motivation for adaptive protocols.
-
-**With finite $T_2$** the envelope $t^2 e^{-2t/T_2}$ is maximised at $t = T_2$, so
-information per shot is *bounded*:
-
-$$
-I_{\max} \approx 0.135\,T_2^2 \quad\text{at}\quad t = T_2
-$$
-
-No choice of $t$ escapes that bound. Over $K$ adaptive shots the Cramér–Rao bound
-therefore gives $\mathrm{Var}(\omega) \gtrsim 1/(K\,I_{\max})$: asymptotically
-**SQL-like in the shot count**, with the quantum advantage surviving only as the
-$1/T_2^2$ prefactor. Decoherence converts the $t^2$ enhancement into a constant
-factor.
-
-Numerically, for $T_2 = 10$ the Fisher-optimal time sits at $t^\star \approx 8.4$–$9.5$
-depending on $\omega$ (computed by `optimal_t_grid`), consistent with the $t = T_2$
-envelope argument.
+This matches the paper's observation that "times which exceed $T_2$ tend to
+yield no information, which explains why the Bayes risk saturates for the
+exp-sparse heuristic."
 
 ### The competing constraint: phase ambiguity
 
-Maximising single-shot Fisher information is *not* the whole story, and this is
-what makes a learned policy worth having. The likelihood depends on $\omega$ only
-through $\cos(\omega t)$, which is periodic. If $t$ is large while the posterior is
-still broad, several distinct $\omega$ values produce the same fringe phase, the
-posterior goes **multimodal**, and the filter cannot tell the aliases apart.
+Fisher information is a *local* quantity, and maximising it is the wrong move
+while the prior is still broad. The likelihood depends on $\omega$ only through
+$\cos(\omega t)$, which is periodic. Over the prior support $\Delta\omega = 1$ the
+fringe wraps once $t > 2\pi \approx 6.28$: several well-separated $\omega$ then
+produce the same phase, the posterior goes **multimodal**, and the filter cannot
+resolve the aliases.
 
 So a good policy must trade off:
 
@@ -142,25 +196,16 @@ So a good policy must trade off:
 - **$t \approx T_2$** — maximum information per shot, but aliases a broad prior;
 - **$t \gg T_2$** — decohered, zero information, strictly wasted.
 
-The textbook resolution is to grow $t$ as the posterior narrows, keeping the phase
-spread across the posterior at roughly one radian — which is exactly what the
-Particle Guess Heuristic does (`modules/policies.py:PGHPolicy`), and what an RL
-policy is expected to discover on its own.
+The resolution is to grow $t$ *as the posterior narrows*, keeping the phase
+spread across the posterior at roughly one radian — exactly what the $\sigma^{-1}$
+and PGH heuristics do, and what an RL policy is expected to discover.
 
-### The reward
-
-The reward is the **reduction in posterior variance** at each step
-(`modules/rewards.py:11-12`, inlined at `train_TRPO_baseline.py:300,317`):
-
-$$
-r_k \;=\; V_{k-1} - V_k, \qquad V_k \;=\; \sum_i w_i\bigl(\omega_i - \bar{\omega}\bigr)^2
-$$
-
-The per-step rewards telescope, so the undiscounted episode return is exactly
-$V_0 - V_T$. Note this is a **linear** variance reduction, not log-variance or
-information gain — see [gotcha 4](#4-the-reward-signal-vanishes-after-the-first-few-steps).
-
----
+Because those heuristics only reach large $t$ *after* the posterior has
+collapsed, they never alias, which is why the paper discusses large-$t$ failure
+purely in terms of decoherence. A **constant** $t = 10$, by contrast, aliases
+from the very first shot — which is why it performs so badly in the
+[measured results](#baseline-results) despite sitting at the Fisher optimum.
+The two statements are consistent; they describe different situations.
 
 ## The inference layer: SMC particle filter
 
@@ -605,6 +650,11 @@ Every method run through identical SMC and measurement code via
 seed 42, $T_2 = 10$** — the same $\omega$ list for every method, so the
 comparison is paired. Prior variance is $1/12 = 0.0833$.
 
+The `median final var` / `mean` columns are the **Bayes risk** of
+[Eq. (1)](#the-figure-of-merit-bayes-risk) — for this single-parameter,
+experiment-limited problem the traced posterior covariance averaged over true
+$\omega$ is exactly the final posterior variance. Lower is better.
+
 | method | median final var | mean | p10 | p90 | median $t$ | max $t$ |
 |---|---|---|---|---|---|---|
 | **fixed $t = 0.5$** | **4.09e-04** | 4.30e-04 | 3.05e-04 | 5.80e-04 | 0.50 | 0.5 |
@@ -671,6 +721,80 @@ $t = 2$, is *not* explained by aliasing — all three are well inside the
 unambiguous regime. Liu–West jitter and the aggressive $0.75N$ resample trigger
 are the likely culprits, but this has not been isolated.
 
+---
+
+## Divergences from Fiderer et al.
+
+The equations in this repo match the paper. The *setup* around them does not,
+in several places. These are documented rather than fixed, because changing any
+of them invalidates the shipped checkpoint and the results table above; they
+belong in a separate, deliberate change.
+
+| | Fiderer | this repo |
+|---|---|---|
+| discount factor $\gamma$ | **1** (required by Eq. 3) | `0.99` — [gotcha 4](#4-gamma--099-breaks-the-bayes-risk-identity) |
+| observation | mean, covariance, ≤30 past actions, **+ spent resource** | mean, var, 30 past actions — [gotcha 3](#3-the-observation-is-missing-the-resource-counter-and-is-badly-scaled) |
+| TRPO initialisation | imitation pretraining, then RL | from scratch (see below) |
+| resource regimes | time-limited **and** experiment-limited | experiment-limited only (see below) |
+| particles ($\omega$ with finite $T_2$) | $2\times10^4$ | $10^4$ train, $2\times10^3$ eval |
+| TRPO hidden layers | 2 × 64 | `[256, 256]` |
+| CEM hidden layer | 16, **ReLU** | 16, **Tanh** (`models/nn.py:91`) |
+| CEM sampling covariance | $1/2$ | `CEM_INIT_STD = 1.0` |
+| exp-sparse heuristic | $t_k = (9/8)^k$ | `ExponentialSweepPolicy(t0=0.1, r=1.05)` |
+| bound on $t$ | none | `T_MAX = 3000` |
+
+### No imitation pretraining — the leading hypothesis for the gap
+
+Fiderer trains in **two stages**: the network is first initialised by imitation
+learning on an existing heuristic ($\sigma^{-1}$, PGH, or a CEM-trained network),
+and only then refined with TRPO. The paper is candid that this is a stability
+measure — "this pretraining step is not strictly necessary but speeds up the
+training and makes RL more stable" — and every TRPO curve in the paper's Fig. 2
+is pretrained, with the seed heuristic named in the legend.
+
+**This repo trains TRPO from scratch.** Given that the resulting policy is
+unstable (35.6% of actions on the action floor) and loses to a constant on
+99.85% of frequencies, this is the single most likely explanation for the gap,
+ahead of the $\gamma$ bug. It is also the largest piece of missing machinery: a
+behaviour-cloning stage feeding into TRPO.
+
+### Only the experiment-limited regime is implemented
+
+The paper studies two kinds of episode: **experiment-limited** (a fixed number
+$N$ of measurements) and **time-limited** (a fixed budget of total evolution
+time $T$, so cheap short measurements buy more shots). This repo implements
+only the former.
+
+That matters for expectations: the paper's headline claim — an improvement over
+PGH of "more than one order of magnitude" — is specifically for **time-limited
+$\omega$ estimation with $T_2 = 10$**. **This repo cannot reproduce that result**,
+because it has no time-limited environment. In the experiment-limited panels
+the reported NN advantage over PGH is considerably more modest.
+
+### What is *not* the explanation: particle count
+
+The repo evaluates with $2\times10^3$ particles where the paper uses
+$2\times10^4$ for exactly this finite-$T_2$ case, which looked like a plausible
+reason for the adaptive heuristics doing poorly — a depleted filter losing the
+fringe as $t$ grows. **Measured, and it is not.** At 512 $\omega$, seed 42:
+
+| heuristic | 2 000 particles | 20 000 particles |
+|---|---|---|
+| PGH | 5.47e-03 | 5.32e-03 |
+| $1/\sigma$ | 8.34e-03 | 9.22e-03 |
+
+A 10× increase moves PGH by 3% and makes $1/\sigma$ marginally worse. Particle
+depletion is ruled out.
+
+The likelier mechanism is a self-reinforcing aliasing trap. Both heuristics set
+$t \approx 1/\sigma$; at the variance they plateau near, that is $t \approx 11$,
+which is past the $t > 2\pi$ aliasing threshold for this prior. The posterior
+then stays multimodal, $\sigma$ stays large, $t$ stays $\approx 11$, and the
+heuristic cannot escape. Capping the time breaks the loop, which is exactly what
+the results show: PGH capped at 2 reaches 2.04e-03 against 5.19e-03 uncapped.
+Both heuristics are asymptotically optimal for $T_2 = \infty$, where no such
+threshold exists.
+
 ## Known issues and gotchas
 
 These are real and worth reading before trusting any number out of this repo.
@@ -688,25 +812,63 @@ exactly `0.0` in floating point. Any $t \gtrsim 200$ yields $p_0 = 0.5$ identica
 a measurement with **literally zero** Fisher information. More than 99% of the
 action range is physically useless, which makes exploration far harder than it
 needs to be. `t_max = 3000` would be a sane "coherence-scale bound" only for the
-dead $T_2 = 100$. Either delete line 31 or shrink `T_MAX` to $O(10\text{–}100)$ —
-but note that changing either invalidates comparison with the existing checkpoints.
+dead $T_2 = 100$.
 
-### 3. The observation vector is badly scaled
+Note this bound is a repo choice, not the paper's: Fiderer imposes no upper
+limit on $t$ (its $\sigma^{-1}$ and PGH heuristics grow without one, and the
+exp-sparse heuristic grows geometrically forever). A bounded `Box` action space
+is a reasonable concession to RL, but $O(10\text{–}100)$ would cover everything
+physically useful. Changing it invalidates comparison with the existing
+checkpoints.
 
-`[mean, var, *t_history]` mixes a variance of order $10^{-4}$ with interrogation
-times of order $10^3$, and is fed unnormalised into the MLP. There is no
+### 3. The observation is missing the resource counter, and is badly scaled
+
+Two separate problems.
+
+**Missing input.** Fiderer specifies the observation as
+$\mathbb{E}[\theta \mid D_k]$, $\mathrm{Cov}(\theta \mid D_k)$, the previous
+actions (at most 30), **and the spent time or number of experiments in the
+current episode**. This repo builds `[mean, var, *t_history]`
+(`train_TRPO_baseline.py:287-289`) and omits the resource term entirely. The
+policy therefore cannot distinguish measurement 5 from measurement 120, which
+makes any correct endgame behaviour unlearnable — there is no input that tells
+it the episode is ending. Fixing this means `shape=(3 + history_size,)` and a
+retrain.
+
+**Bad scaling.** What is there mixes a variance of order $10^{-4}$ with
+interrogation times of order $10^3$, fed unnormalised into the MLP. There is no
 `VecNormalize` and no `check_env` call.
 
-### 4. The reward signal vanishes after the first few steps
+### 4. `GAMMA = 0.99` breaks the Bayes-risk identity
 
-The return is capped at $V_0 = 1/12 \approx 0.083$, and the posterior variance falls
-by two orders of magnitude within the first ~20 measurements. Per-step rewards
-beyond that are $\sim 10^{-5}$ — numerically negligible against the early steps. The
-adaptive-design literature optimises $-\log V$ or the information gain
-$\log(V_{k-1}/V_k)$ precisely because those are scale-free and give constant
-signal throughout an exponential collapse. **If late-episode policy behaviour
-looks unlearned, this reward shaping is the first thing to examine, not the
-network.**
+`pipeline/train_TRPO_baseline.py:49` sets `GAMMA = 0.99`. The paper sets it to
+**one**, and that is not incidental — it is what makes the whole training
+objective correct. Fiderer Eq. (3) holds only for an undiscounted return:
+
+$$
+\mathbb{E}_{D_N}\Bigl[\textstyle\sum_{j=1}^{N} R(D_j)\Bigr] = \mathrm{const} - r\bigl(h \mid p(\theta)\bigr)
+$$
+
+"RL has the goal to maximize the expected discounted reward which equals the
+left-hand side of Eq. (3) because we set the discount factor to one."
+
+With $\gamma = 0.99$ over a 100-step episode, $0.99^{100} \approx 0.37$: late
+measurements are discounted by nearly two thirds. TRPO is then **not minimising
+the Bayes risk** — it is minimising a discounted surrogate that overweights
+early variance reduction. Combined with the fact that the posterior variance
+collapses by two orders of magnitude within the first ~20 measurements (so
+per-step rewards after that are $\sim 10^{-5}$ regardless), the late-episode
+signal is close to nonexistent.
+
+**Set `GAMMA = 1.0` before drawing any conclusion about the method.** This is
+the most likely cause of the greedy, unstable behaviour in the
+[baseline results](#baseline-results) — 35.6% of actions pinned to the $t = 0.1$
+floor.
+
+> An earlier version of this README claimed the linear $\Delta V$ reward was
+> itself the defect and that the literature uses $-\log V$ instead. That was
+> wrong: the reward matches Fiderer Eq. (2) exactly and is well justified. The
+> discount factor is the actual bug.
 
 ### 5. The four rollout implementations are not equivalent
 
@@ -759,10 +921,17 @@ older MLflow runs) can no longer be executed.
 
 Measured, not conjectured — see [Baseline results](#baseline-results). A
 constant $t = 1$ reaches a **4.7× lower** median final posterior variance than
-the trained policy, and wins on 99.85% of individual $\omega$ values. Until that gap is closed,
-no claim that the learned heuristic is doing something useful is supportable.
-The likely causes are documented above: reward shaping (gotcha 4) and
-observation scaling (gotcha 3).
+the trained policy, and wins on 99.85% of individual $\omega$ values. Until that
+gap is closed, no claim that the learned heuristic is doing something useful is
+supportable.
+
+The candidate causes, in order of suspicion, are all
+[divergences from the paper](#divergences-from-fiderer-et-al) rather than
+anything intrinsic to the method: no imitation pretraining, $\gamma = 0.99$
+instead of 1 (gotcha 4), and no resource counter in the observation (gotcha 3).
+The comparison also uses the best *loadable* checkpoint, which trained for 1000
+episodes; the 68-hour run scored 3× better before losing its weights
+(gotcha 7).
 
 ---
 
