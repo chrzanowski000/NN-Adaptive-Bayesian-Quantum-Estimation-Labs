@@ -23,6 +23,9 @@ gradient-free evolutionary search (CEM), following the approach of Fiderer, Schu
 - [Repository layout](#repository-layout)
 - [Installation](#installation)
 - [Running things](#running-things)
+  - [TRPO, end to end](#trpo-end-to-end)
+  - [CEM, end to end](#cem-end-to-end)
+  - [Baselines (no training)](#baselines-no-training)
 - [Experiment tracking](#experiment-tracking)
 - [Known issues and gotchas](#known-issues-and-gotchas)
 
@@ -255,20 +258,23 @@ modules/
   rollout.py               episode rollout for a raw torch policy      -> used by CEM
   rollout_sb3.py           episode rollout for an SB3 model, CPU       -> used by test_TRPO_N
   rollout_sb3_cuda.py      batched rollout for an SB3 model, GPU       -> used by test_TRPO_N_cuda
-  rollout_generic.py       batched rollout for ANY policy              -> used by benchmarks
+  rollout_generic.py       batched rollout for ANY policy              -> used by evaluate
   policies.py              baseline policy zoo + Fisher-information reference
 
 models/nn.py               policy networks (TimePolicy_Fiderer_16 is the live one)
 
 pipeline/
+  evaluate.py              evaluate ANY policy, write plots + summary   <- start here
   train_TRPO_baseline.py   TRPO training (defines AdaptiveSMCEnv)
   train_CEM.py             CEM training
   test_TRPO_N.py           evaluate a TRPO policy over N true omegas, CPU
   test_TRPO_N_cuda.py      same, batched on GPU
   test_CEM.py              evaluate a CEM policy, single omega
   test_CEM_N.py            evaluate a CEM policy over N true omegas
+                           (the four test_*.py are legacy; see below)
 
 utils/
+  plotstyle.py             shared matplotlib style: palette, marks, log axes
   git_utils/git.py         commit / branch / dirty-flag provenance for MLflow
   cov.py, network_fill.py  unused
 
@@ -306,73 +312,205 @@ minute.
 
 ## Running things
 
-All commands are run as modules **from the repository root**.
+All commands are run as modules **from the repository root**, with the `NNBQE`
+environment active.
 
-### Training
+Two entry points matter:
+
+| | |
+|---|---|
+| `python -m pipeline.train_TRPO_baseline` / `train_CEM` | train a policy |
+| `python -m pipeline.evaluate --policy <name>` | evaluate any policy and write plots |
+
+`pipeline/evaluate.py` handles **every** method — both learned policies and all
+six training-free baselines — through identical inference and measurement code,
+which is what makes the numbers comparable. It supersedes the older
+`pipeline/test_*.py` scripts ([see below](#the-legacy-pipelinetest_py-scripts)).
+
+### Quick check that everything works
+
+No training required — the repo ships a trained TRPO policy, and the baselines
+need none. This takes a few seconds:
 
 ```bash
-python -m pipeline.train_TRPO_baseline     # ~4-25 h at default settings
-python -m pipeline.train_CEM               # ~45 min at default settings
+python -m pipeline.evaluate --policy trpo \
+    --checkpoint artifacts/trpo_sb3_policy.zip --n-omegas 256
+python -m pipeline.evaluate --policy pgh-capped --n-omegas 256
 ```
 
-Every headline hyperparameter can be overridden from the environment, so the same
-script serves a 30-second smoke test and a multi-hour run:
+---
+
+### TRPO, end to end
+
+**1. Train.**
 
 ```bash
-# quick end-to-end check that nothing is broken
-N_PARTICLES=200 EPISODE_LEN=10 N_TRAIN_EPISODES=300 PLOT_COUNT=3 \
-CHECKPOINT_EVERY_STEPS=1000 python -m pipeline.train_TRPO_baseline
+python -m pipeline.train_TRPO_baseline
+```
 
-N_PARTICLES=200 EPISODE_LEN=10 CEM_POP=20 CEM_GENERATIONS=3 \
+Defaults: 10<sup>5</sup> episodes × 100 steps = 10<sup>7</sup> timesteps, 10 000
+particles, `net_arch=[256,256]`, `target_kl=1e-2`. Expect **4–25 hours** on CPU
+(the spread is real: the 100k-timestep run took 154 s, the 100M-timestep run
+averaged 6× slower per step). Set `DEVICE=cuda` if you have a GPU.
+
+Checkpoints are written every 50 000 timesteps, so you can evaluate a partially
+trained policy at any point and a crash costs you at most one interval:
+
+```
+artifacts/checkpoints/trpo_step_<N>.zip    numbered history
+artifacts/trpo_sb3_policy_latest.zip       rolling latest
+artifacts/trpo_sb3_policy.zip              final, written when training completes
+artifacts/checkpoints/trpo_interrupted.zip written on crash or Ctrl-C
+```
+
+Shorten a run with the environment overrides:
+
+```bash
+# ~10 minutes instead of hours
+N_TRAIN_EPISODES=5000 N_PARTICLES=2000 CHECKPOINT_EVERY_STEPS=25000 \
+python -m pipeline.train_TRPO_baseline
+```
+
+**2. Evaluate.**
+
+```bash
+python -m pipeline.evaluate --policy trpo \
+    --checkpoint artifacts/trpo_sb3_policy_latest.zip \
+    --n-omegas 10000
+```
+
+Any of these checkpoints work as `--checkpoint`:
+
+```bash
+artifacts/trpo_sb3_policy.zip                                    # best available (run caaabcb8)
+artifacts/checkpoints/trpo_step_000250000.zip                    # any mid-training checkpoint
+mlruns/3/809c8bf6c4cb45569dc7719cc82e24a9/artifacts/trpo_sb3_policy.zip
+```
+
+---
+
+### CEM, end to end
+
+**1. Train.**
+
+```bash
 python -m pipeline.train_CEM
 ```
 
-Recognised variables — TRPO: `N_PARTICLES`, `EPISODE_LEN`, `HISTORY_SIZE`,
-`RANDOM_SEED`, `N_TRAIN_EPISODES`, `PLOT_COUNT`, `CHECKPOINT_EVERY_STEPS`,
-`DEVICE`, `MLFLOW_TRACKING_URI`. CEM: `N_PARTICLES`, `EPISODE_LEN`, `CEM_POP`,
-`CEM_ELITE_FRAC`, `CEM_INIT_STD`, `CEM_GENERATIONS`, `HISTORY_SIZE`,
-`RANDOM_SEED`, `CHECKPOINT_EVERY_GENS`, `MLFLOW_TRACKING_URI`.
+Defaults: 100 generations × population 1000, elite fraction 0.1, 2000 particles,
+100-step episodes, optimising the flat 545-dim weight vector of
+`TimePolicy_Fiderer_16`. **About 45 minutes** on CPU (~27 s per generation).
 
-**Checkpointing.** Both trainers now save periodically:
+Checkpoints every 5 generations:
 
 ```
-artifacts/checkpoints/trpo_step_<N>.zip     every CHECKPOINT_EVERY_STEPS (default 50 000)
-artifacts/trpo_sb3_policy_latest.zip        rolling latest
-artifacts/checkpoints/cem_gen_<N>.pt        every CHECKPOINT_EVERY_GENS (default 5)
-artifacts/cem_policy_latest.pt              rolling latest
+artifacts/checkpoints/cem_gen_<N>.pt   numbered history
+artifacts/cem_policy_latest.pt         rolling latest
+artifacts/checkpoints/cem_final.pt     written when training completes
 ```
 
-A crash or `Ctrl-C` during TRPO training also writes
-`artifacts/checkpoints/trpo_interrupted.zip` before propagating. This matters: an
-earlier 68-hour run saved only at the end, crashed, and lost its weights
-([gotcha 7](#7-the-best-result-in-the-repo-is-unreproducible)).
+Each `.pt` holds the policy `state_dict` alongside the CEM distribution
+(`mu`, `sigma`), so a run can be inspected or resumed.
 
-### Loading a trained policy
+```bash
+# ~2 minutes instead of 45
+CEM_GENERATIONS=10 CEM_POP=200 python -m pipeline.train_CEM
+```
+
+**2. Evaluate.**
+
+```bash
+python -m pipeline.evaluate --policy cem \
+    --checkpoint artifacts/cem_policy_latest.pt \
+    --n-omegas 10000
+```
+
+> The CEM checkpoint that ships in `mlruns/1/` is from a 2-generation run and is
+> effectively untrained. Train first before drawing any conclusion about CEM.
+
+---
+
+### Baselines (no training)
+
+```bash
+python -m pipeline.evaluate --policy pgh                        # t = 1/|w1 - w2|
+python -m pipeline.evaluate --policy pgh-capped                 # capped at T2
+python -m pipeline.evaluate --policy pgh-capped --t-cap 2.0     # capped elsewhere
+python -m pipeline.evaluate --policy sigma-inv --k 1.0          # t = k/sigma
+python -m pipeline.evaluate --policy fixed --fixed-t 1.0        # constant t
+python -m pipeline.evaluate --policy exp-sweep --t0 0.1 --r 1.05
+python -m pipeline.evaluate --policy random                     # t ~ U(0.1, 3000)
+```
+
+### What evaluation produces
+
+Output goes to `validation/run<N>/` (auto-incremented), or `--out DIR`:
+
+| file | contents |
+|---|---|
+| `summary.json` | final variance mean/median/p10/p90, mean & max `t`, ESS, resample count, runtime |
+| `trajectories.npz` | raw `var`, `mean`, `ess`, `t`, `omegas`, `n_resample` arrays |
+| `posterior_variance_log.png` | posterior collapse, log axis — the headline plot |
+| `posterior_variance.png` | same, linear axis |
+| `predicted_t.png` | chosen interrogation time vs step, against the $T_2$ line |
+| `ess.png` | effective sample size, against the resample threshold |
+| `reward_vs_step.png` | per-measurement variance reduction |
+| `final_variance_vs_omega.png` | final variance against true $\omega$ — exposes aliasing |
+
+Useful flags: `--n-omegas` (default 2000), `--episode-len` (125),
+`--n-particles` (2000), `--batch-size` (512), `--seed` (42), `--device`,
+`--out`. Run `python -m pipeline.evaluate --help` for the full list.
+
+Cost is roughly 4.4 ms per episode, so 10 000 $\omega$ takes about a minute on CPU.
+
+### Comparing methods
+
+Give each run its own directory and read the summaries side by side:
+
+```bash
+for m in trpo pgh pgh-capped sigma-inv random; do
+    extra=""
+    [ "$m" = trpo ] && extra="--checkpoint artifacts/trpo_sb3_policy.zip"
+    python -m pipeline.evaluate --policy "$m" $extra \
+        --n-omegas 4096 --out "validation/cmp_$m"
+done
+
+python - <<'EOF'
+import json, glob
+rows = [json.load(open(f)) for f in sorted(glob.glob("validation/cmp_*/summary.json"))]
+print(f"{'method':<32}{'final var':>12}{'median t':>10}")
+for r in sorted(rows, key=lambda r: r["final_variance_mean"]):
+    print(f"{r['label']:<32}{r['final_variance_mean']:>12.3e}{r['median_t']:>10.2f}")
+EOF
+```
+
+### Plot styling
+
+All figures use `utils/plotstyle.py` — one validated categorical palette, thin
+lines, small point marks, and a recessive grid. Import `apply_style()` before
+creating figures and use `LINE` for trajectories, `log_y()` for log axes (it
+labels the minor ticks, which matplotlib does not by default), and `refline()`
+for annotation lines. Change the look in one place rather than per script.
+
+### Loading a policy in your own code
 
 ```python
 from sb3_contrib import TRPO
 model = TRPO.load("artifacts/trpo_sb3_policy.zip", device="cpu")
 
-from modules.policies import CEMPolicy
-policy = CEMPolicy.from_checkpoint("artifacts/cem_policy_latest.pt")
+from modules.policies import CEMPolicy, TRPOPolicy, PGHPolicy
+cem = CEMPolicy.from_checkpoint("artifacts/cem_policy_latest.pt")
 ```
 
-### Evaluating any policy
-
-`modules/rollout_generic.py` is the recommended path — it works for learned and
-heuristic policies alike, runs on CPU, and is seedable:
+Then roll any of them out directly:
 
 ```python
 import numpy as np
-from sb3_contrib import TRPO
 from modules.rollout_generic import evaluate_policy
-from modules.policies import TRPOPolicy, PGHPolicy, FixedTPolicy
 from modules.simulation import FIXED_T2
 
 omegas = np.random.default_rng(42).uniform(0, 1, 4096)
-model  = TRPO.load("artifacts/trpo_sb3_policy.zip", device="cpu")
-
-for policy in [TRPOPolicy(model), PGHPolicy(t_cap=FIXED_T2), FixedTPolicy(1.0)]:
+for policy in [TRPOPolicy(model), cem, PGHPolicy(t_cap=FIXED_T2)]:
     r = evaluate_policy(policy, omegas, n_particles=2000, episode_len=125)
     print(f"{policy.label:28s} final var = {r['var'][:, -1].mean():.3e}")
 ```
@@ -382,23 +520,41 @@ for policy in [TRPOPolicy(model), PGHPolicy(t_cap=FIXED_T2), FixedTPolicy(1.0)]:
 the posterior **after** $k$ measurements, so `var[:, 0]` is the prior and
 `var[:, -1]` is the true final posterior.
 
+### Environment overrides for training
+
+TRPO: `N_PARTICLES`, `EPISODE_LEN`, `HISTORY_SIZE`, `RANDOM_SEED`,
+`N_TRAIN_EPISODES`, `PLOT_COUNT`, `CHECKPOINT_EVERY_STEPS`, `DEVICE`,
+`MLFLOW_TRACKING_URI`.
+
+CEM: `N_PARTICLES`, `EPISODE_LEN`, `CEM_POP`, `CEM_ELITE_FRAC`, `CEM_INIT_STD`,
+`CEM_GENERATIONS`, `HISTORY_SIZE`, `RANDOM_SEED`, `CHECKPOINT_EVERY_GENS`,
+`MLFLOW_TRACKING_URI`.
+
+```bash
+# 30-second smoke tests
+N_PARTICLES=200 EPISODE_LEN=10 N_TRAIN_EPISODES=300 PLOT_COUNT=3 \
+CHECKPOINT_EVERY_STEPS=1000 python -m pipeline.train_TRPO_baseline
+
+N_PARTICLES=200 EPISODE_LEN=10 CEM_POP=20 CEM_GENERATIONS=3 \
+python -m pipeline.train_CEM
+```
+
 ### The legacy `pipeline/test_*.py` scripts
 
-These predate the generic harness and **none of them run unmodified.** Each
+Superseded by `pipeline/evaluate.py`, and **none of them run unmodified.** Each
 hardcodes an MLflow `RUN_ID` from a machine that no longer exists, and the TRPO
 ones hardcode `file:///home/chrzanowski/mlflow_tracking` as the tracking store.
-To use one you must edit its `RUN_ID` and tracking URI, or replace the MLflow
-lookup with a direct path to `artifacts/trpo_sb3_policy.zip`. Additionally:
+Additionally:
 
 - `test_CEM.py` calls `rollout()` without the required `resample_fn` argument and
   raises `TypeError` regardless — it was never updated when the signature changed.
 - `test_TRPO_N_cuda.py` hardcodes `DEVICE = "cuda"` and calls
-  `torch.cuda.get_device_name(0)`, so it cannot run on a machine without CUDA.
+  `torch.cuda.get_device_name(0)`, so it cannot run without CUDA.
 - Both shell wrappers in `scripts/` use `taskset`, which is Linux-only.
 
-Prefer `modules/rollout_generic.py`.
+To revive one anyway, edit its `RUN_ID` and `mlflow.set_tracking_uri(...)`, or
+replace the MLflow lookup with a direct path to a local checkpoint.
 
----
 
 ## Experiment tracking
 

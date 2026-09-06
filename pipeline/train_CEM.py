@@ -219,8 +219,9 @@ with mlflow.start_run():
                 weights=w,
                 bins=50,
                 density=True,
+                color="#2a78d6",
             )
-            plt.axvline(TRUE_OMEGA, color="red", linestyle="--", label="true ω")
+            plt.axvline(TRUE_OMEGA, color="#52514e", linestyle="--", linewidth=1.0, label="true ω")
             plt.xlabel("ω")
             plt.ylabel("posterior density")
             plt.title(f"Posterior (gen {gen})")

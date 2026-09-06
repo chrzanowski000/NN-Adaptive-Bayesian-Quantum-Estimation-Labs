@@ -130,8 +130,8 @@ class MlflowEpisodeCallback(BaseCallback):
         particles = info["particles"]
 
         plt.figure(figsize=(6, 4))
-        plt.hist(particles[:, 0], weights=w, bins=50, density=True)
-        plt.axvline(info["true_omega"], color="red", linestyle="--", label="true ω")
+        plt.hist(particles[:, 0], weights=w, bins=50, density=True, color="#2a78d6")
+        plt.axvline(info["true_omega"], color="#52514e", linestyle="--", linewidth=1.0, label="true ω")
         plt.xlabel("ω")
         plt.ylabel("posterior density")
         plt.title(f"Posterior (progress {self.plot_idx:03d}/{self.plot_count})")
@@ -438,8 +438,8 @@ with mlflow.start_run(log_system_metrics=False):
     w = normalize(eval_info["logw"])
     particles = eval_info["particles"]
     plt.figure(figsize=(6, 4))
-    plt.hist(particles[:, 0], weights=w, bins=50, density=True)
-    plt.axvline(eval_info["true_omega"], color="red", linestyle="--", label="true ω")
+    plt.hist(particles[:, 0], weights=w, bins=50, density=True, color="#2a78d6")
+    plt.axvline(eval_info["true_omega"], color="#52514e", linestyle="--", linewidth=1.0, label="true ω")
     plt.xlabel("ω")
     plt.ylabel("posterior density")
     plt.title("Posterior (final eval)")
