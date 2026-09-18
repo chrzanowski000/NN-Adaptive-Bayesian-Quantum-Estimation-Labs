@@ -1,0 +1,380 @@
+% ===========================================================================
+% TEMPLATE.tex — section skeleton for a report in the README.tex format.
+% Each section: name + what belongs inside. Replace <fill in> text; keep the
+% structure, labels, and \noindent\rule/\FloatBarrier separators. Compile:
+%   pdflatex TEMPLATE.tex
+% ===========================================================================
+
+\documentclass[12pt,a4paper]{article}
+\usepackage[left=2.00cm,right=2.00cm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{graphicx}
+\usepackage{longtable}
+\usepackage{subcaption}
+\usepackage{amsmath}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true, linkcolor=blue, urlcolor=blue,
+            pdftitle={<report title>},
+            pdfauthor={<author>}}
+\usepackage{placeins}
+
+% ---------------------------------------------------------------------------
+% Additions to the supplied preamble:
+\usepackage{amssymb}   % \checkmark, which the text uses
+\usepackage{booktabs}  % \toprule/\midrule/\bottomrule, consistent table rules
+\usepackage{array}     % >{\raggedright\arraybackslash}p{} column specifications
+\usepackage[table]{xcolor} % \cellcolor, gradient shading in the cross-case tables
+\setlength{\emergencystretch}{2em}   % keeps dense paragraphs within the measure
+% ---------------------------------------------------------------------------
+
+\title{<report title>}
+\author{<author>}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+% ===========================================================================
+\section*{Introduction}
+% ===========================================================================
+% One paragraph: what the project set out to do (aim), in one or two sentences.
+% Then a short paragraph stating the scale of the work: what was implemented
+% (how many methods/variants, over what cases) and how they divide into
+% families/groups. End with the headline result (the one-sentence takeaway the
+% reader should remember).
+%
+% <fill in: aim --- e.g. "The aim of this project was to test out different
+%  numerical methods for ...">
+%
+% <fill in: what was implemented and how it divides into families/groups>
+%
+% <fill in: the headline result --- what wins, what loses, by how much>
+
+% Optional if the text uses abbreviations: a two-column abbreviation table.
+\begin{table}[H]
+  \centering
+  \begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.42\textwidth}
+                    >{\raggedright\arraybackslash}p{0.42\textwidth}@{}}
+    \toprule
+    Full name & Abbreviation \\
+    \midrule
+    <full name> & <ABBREVIATION> \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\noindent\rule{\textwidth}{0.4pt}
+
+% ===========================================================================
+\section*{Table of contents}
+% ===========================================================================
+% Manual TOC: one \hyperref per numbered section below, in order. Keep it in
+% sync with the section list; this report does not use an automatic TOC.
+\begin{itemize}
+  \item \hyperref[sec:the-experiment]{The experiment}
+  \item \hyperref[sec:the-physics]{The physics}
+  \item \hyperref[sec:configuration]{Parameters}
+  \item \hyperref[sec:the-four-method-families]{The four method families}
+  \item \hyperref[sec:analysis]{Analysis --- all fifteen operator combinations}
+  \item \hyperref[sec:summary]{Summary}
+\end{itemize}
+
+\noindent\rule{\textwidth}{0.4pt}
+\FloatBarrier
+
+% ===========================================================================
+\section{The experiment}
+\label{sec:the-experiment}
+% ===========================================================================
+% WHAT IS SIMULATED. The physical setup in prose: initial state, the objects
+% acting on it, and the variation space (what is chosen independently, how many
+% combinations that gives). State the actual parameter values here in passing.
+% Structure: setup sentence -> enumerate the terms acting on the system ->
+% classify the variants into two structurally different kinds -> the combined
+% behaviour in one sentence -> propagation horizon + the extras some methods use
+% (as an itemize).
+%
+% <fill in: initial state and its Bloch vector / purity>
+% <fill in: enumerate the acting terms, each with its equation and value>
+% <fill in: the two structural kinds of variants and what each does>
+% <fill in: combined behaviour, one sentence>
+% <fill in: time grid; then itemize the optional add-ons (rates, efficiencies)>
+
+\noindent\rule{\textwidth}{0.4pt}
+\FloatBarrier
+
+% ===========================================================================
+\section{The physics}
+\label{sec:the-physics}
+% ===========================================================================
+% THE THEORY the numerics implement, in increasing order of specificity:
+% general formalism -> the governing equation -> one fully worked example ->
+% the conceptual distinctions the variants rest on.
+
+% ---------------------------------------------------------------------------
+\subsection{State and Bloch representation}
+\label{sec:state-and-bloch-representation}
+% ---------------------------------------------------------------------------
+% The state space and the representation every method reports through: the
+% decomposition equation, how the coefficients are recovered, and purity as a
+% function of the vector norm (pure on the sphere, mixed inside).
+%
+% <fill in: state decomposition equation, recovery rule, purity statement>
+
+% ---------------------------------------------------------------------------
+\subsection{The governing equation}
+\label{sec:the-governing-equation}
+% ---------------------------------------------------------------------------
+% The central equation with its terms named and interpreted (one bullet per
+% term), the conservation it guarantees, and how independent contributions
+% combine (the multi-channel form). Cite the original source.
+%
+% <fill in: the main equation, labelled>
+% <fill in: bullet per term --- what each represents>
+% <fill in: trace/conservation statement>
+% <fill in: multi-term extension equation>
+
+% ---------------------------------------------------------------------------
+\subsection{\texorpdfstring{A worked example: the <name> case}{A worked example: the <name> case}}
+\label{sec:this-model-solved-by-hand}
+% ---------------------------------------------------------------------------
+% One case solved in closed form so the numerics have an exact reference, and a
+% note that all other cases follow by permuting operators. Derive the reduced
+% equations, state their eigenvalues/timescales, compare the measured numbers
+% against the closed form (mark agreement with \checkmark), and give the steady
+% state plus the effect of the optional add-on.
+%
+% <fill in: derivation of the reduced equations>
+% <fill in: consequences --- eigenvalues, decay factors, measured-vs-expected>
+% <fill in: steady state; effect of the add-on at full strength>
+
+% ---------------------------------------------------------------------------
+\subsection{\texorpdfstring{Conceptual axis 1 --- <distinction A>}{Conceptual axis 1 -- <distinction A>}}
+\label{sec:conceptual-axis-1}
+% ---------------------------------------------------------------------------
+% The first independent distinction the variants rest on. Define each side in a
+% bullet, state the equivalence the ensemble average forces (the sentence a
+% sceptical reader needs), how each side can be implemented, and the special
+% value that collapses the distinction.
+%
+% <fill in: bullet defining each side>
+% <fill in: the equivalence statement + both implementation routes>
+% <fill in: collapsing value -> what it reduces to>
+
+% ---------------------------------------------------------------------------
+\subsection{\texorpdfstring{Conceptual axis 2 --- <distinction B> vs.\ <distinction C>}{Conceptual axis 2 -- <distinction B> vs. <distinction C>}}
+\label{sec:conceptual-axis-2}
+% ---------------------------------------------------------------------------
+% The second independent distinction, as a What changes / single-trajectory /
+% ensemble-average table, followed by the measured numbers demonstrating each
+% side (itemize).
+%
+% <fill in: the three-row comparison table>
+% <fill in: itemize of measured consequences>
+
+\noindent\rule{\textwidth}{0.4pt}
+\FloatBarrier
+
+% ===========================================================================
+\section{Parameters}
+\label{sec:configuration}
+% ===========================================================================
+% THE KNOBS. One sentence saying a single set is shared by everything (so all
+% comparisons are apples-to-apples), then the Symbol/Value/Meaning table, then a
+% derived-quantities paragraph (total time, initial vector, what the run covers
+% in units of the natural periods).
+%
+% <fill in: table --- symbol, value, meaning per parameter>
+% <fill in: derived quantities; how many natural periods the run covers>
+
+% ===========================================================================
+\section{The four method families}
+\label{sec:the-four-method-families}
+% ===========================================================================
+% THE ALGORITHMS. One \subsection per family (one-paragraph characterisation:
+% what it evolves, memory cost, distinctive structural feature), then one
+% \subsubsection per method inside it. Every method gets the same recipe:
+%   1. the objects it evolves and any precomputed operators (as equations),
+%   2. the per-step update (aligned cases/equations),
+%   3. what makes it different from its siblings,
+%   4. its convergence target and error order,
+%   5. its limits --- which special parameter values collapse it onto which
+%      other method.
+
+% ---------------------------------------------------------------------------
+\subsection{Family 1 --- <name> (role, e.g. deterministic ground truth)}
+\label{sec:family-1}
+% ---------------------------------------------------------------------------
+% One paragraph: how many methods, why they are reproducible, what role they
+% play (reference for everyone else).
+%
+% <fill in: family role paragraph>
+
+\subsubsection{\texorpdfstring{1. <Method name>}{1. <Method name>}}
+\label{sec:method-1}
+% <fill in: idea, equations, update rule, convergence target, limits>
+
+\subsubsection{\texorpdfstring{2. <Method name>}{2. <Method name>}}
+\label{sec:method-2}
+% <fill in: idea, equations, update rule, convergence target, limits>
+
+\subsubsection{\texorpdfstring{3. <Method name>}{3. <Method name>}}
+\label{sec:method-3}
+% <fill in: idea, equations, update rule, convergence target, limits>
+
+\noindent\rule{\textwidth}{0.4pt}
+\FloatBarrier
+
+% ---------------------------------------------------------------------------
+\subsection{Family 2 --- <name>}
+\label{sec:family-2}
+% ---------------------------------------------------------------------------
+% One paragraph: what the family unravels/evolves, memory cost, structural
+% invariant it maintains.
+%
+% <fill in: family role paragraph>
+
+\subsubsection{\texorpdfstring{4. <Method name>}{4. <Method name>}}
+\label{sec:method-4}
+% <fill in>
+
+\subsubsection{\texorpdfstring{5. <Method name> $+$ <variant>}{4. <Method name> + <variant>}}
+\label{sec:method-5}
+% <fill in>
+
+\noindent\rule{\textwidth}{0.4pt}
+\FloatBarrier
+
+% ---------------------------------------------------------------------------
+\subsection{Family 3 --- <name>}
+\label{sec:family-3}
+% ---------------------------------------------------------------------------
+% One paragraph: what the family evolves, what it permits that the previous
+% family cannot, and what it never forms.
+%
+% <fill in: family role paragraph>
+
+\subsubsection{\texorpdfstring{6. <Method name>}{6. <Method name>}}
+\label{sec:method-6}
+% <fill in>
+
+\subsubsection{\texorpdfstring{7. <Method name> $+$ <variant>}{7. <Method name> + <variant>}}
+\label{sec:method-7}
+% <fill in>
+
+\noindent\rule{\textwidth}{0.4pt}
+\FloatBarrier
+
+% ---------------------------------------------------------------------------
+\subsection{Family 4 --- <name>}
+\label{sec:family-4}
+% ---------------------------------------------------------------------------
+% One paragraph: the operator-sum representation the family is built on, and how
+% its discretisation differs structurally from Family 3.
+%
+% <fill in: family role paragraph>
+
+\subsubsection{\texorpdfstring{8. <Method name>}{8. <Method name>}}
+\label{sec:method-8}
+% <fill in>
+
+\subsubsection{\texorpdfstring{9. <Method name> $+$ <variant>}{9. <Method name> + <variant>}}
+\label{sec:method-9}
+% <fill in>
+
+\subsubsection{\texorpdfstring{10. <Method name> $+$ <variant>$\times$2}{10. <Method name> + variant x2}}
+\label{sec:method-10}
+% <fill in>
+
+\noindent\rule{\textwidth}{0.4pt}
+\FloatBarrier
+
+% ---------------------------------------------------------------------------
+\subsection{Method comparison at a glance}
+\label{sec:method-comparison}
+% ---------------------------------------------------------------------------
+% A single longtable over all methods: number, name, what it evolves,
+% stochastic?, no-jump branch (with error order), convergence target --- and a
+% closing sentence naming the two independent routes to the deterministic answer.
+%
+% <fill in: longtable, one row per method>
+
+% ===========================================================================
+\section{Analysis --- <scope of the analysis>}
+\label{sec:analysis}
+% ===========================================================================
+
+% ---------------------------------------------------------------------------
+\subsection{Metrics}
+\label{sec:metrics}
+% ---------------------------------------------------------------------------
+% The closeness metrics, each as a numbered equation (max deviation, MAE, RMSE,
+% and a normalised RMSE with its normalisation), how the integrals are
+% evaluated, the dimensionless interpretation, and the degenerate-case
+% convention. Close by stating what the preceding single-model sections fixed
+% and what the sweep varies.
+%
+% <fill in: metric equations + trapezoid note + null-case convention>
+% <fill in: the sweep statement --- what varies, what is held fixed>
+
+% ---------------------------------------------------------------------------
+\subsection{Cross-case method agreement}
+\label{sec:cross-case-method-agreement}
+% ---------------------------------------------------------------------------
+% Three full-width metric tables (one per metric) over all cases x all methods,
+% cells colour-scaled on one whole-table scale, plus the method-to-reference
+% mapping table. Text states: which method is scored against which reference,
+% and calls out the degenerate case that is identically zero.
+%
+% <fill in: reference-mapping table, then the three metric tables>
+
+% ---------------------------------------------------------------------------
+\subsection{Case-by-case results}
+\label{sec:case-by-case-results}
+% ---------------------------------------------------------------------------
+% One \subsubsection per case: the operators, the explicit master equation
+% integrated, and one figure with the two subfigures (without/with the add-on),
+% then \FloatBarrier. Preceded by the observations common to all cases: the
+% ranking, the best variant and why, the worst family, and what the control
+% column demonstrates.
+%
+% <fill in: common-observations paragraphs>
+%
+% --- repeat per case, e.g.: ---
+% \subsubsection{\texorpdfstring{<Case heading>}{<Case heading ascii>}}
+% \label{sec:case-<slug>}
+% \[ <operators> \]
+% \[ <explicit equation integrated> \]
+% \begin{figure}[H]
+%   \centering
+%   \begin{subfigure}[b]{0.48\textwidth}
+%     \centering
+%     \includegraphics[width=\textwidth]{figures/<case>_no_<addon>.png}
+%     \caption{Without <addon>}
+%   \end{subfigure}\hfill
+%   \begin{subfigure}[b]{0.48\textwidth}
+%     \centering
+%     \includegraphics[width=\textwidth]{figures/<case>_with_<addon>.png}
+%     \caption{With <addon>}
+%   \end{subfigure}
+%   \caption{<Case heading>: <short operator summary>.}
+%   \label{fig:<case>}
+% \end{figure}
+% \FloatBarrier
+
+\noindent\rule{\textwidth}{0.4pt}
+\FloatBarrier
+
+% ===========================================================================
+\section{Summary}
+\label{sec:summary}
+% ===========================================================================
+% Restate the aim, the scale (methods, families, cases), and the headline
+% ranking --- a condensed echo of the Introduction; no new material.
+%
+% <fill in: aim, scale, headline result>
+
+\end{document}
