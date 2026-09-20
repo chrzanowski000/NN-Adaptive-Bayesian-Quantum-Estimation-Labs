@@ -321,15 +321,15 @@ Liu--West resampling fixes this by adding random noise to
 each particle while preserving the posterior's first two moments.
 
 \paragraph{Particle system.}
-We carry $N$ parameter particles $\{\omega_i\}$ with log-weights $\{\log w_i\}$.
+We carry $N$ parameter particles $\{\xi^i\}$ with log-weights $\{\log w_k^i\}$.
 Shapes are \texttt{(N, 1)} / \texttt{(N,)} in the NumPy convention.
 
 \paragraph{Bayes update.}
-Each new observation $d$ at step $t$ reweights particles, carried out entirely
+Each new observation $y_k$ at step $k$ reweights particles, carried out entirely
 in the log domain:
 \begin{equation}
-\log w_i \leftarrow \log w_i
-  + \log P(d \mid \omega_i, t)
+\log w_k^i \leftarrow \log w_k^i
+  + \log p(y_k \mid \xi^i)
   - \operatorname{logsumexp}(\cdot).
 \label{eq:bayes-update}
 \end{equation}
@@ -338,23 +338,23 @@ Renormalised every step, so the weights always sum to one, and only the
 \emph{locations} are untouched by the update.
 
 \paragraph{Effective sample size.}
-The Kish ESS,
+The Kish $N_{\mathrm{eff}}$,
 \begin{equation}
-\mathrm{ESS} = \Bigl(\textstyle\sum_i w_i^{2}\Bigr)^{-1} \in [1, N],
+N_{\mathrm{eff}} = \Bigl(\textstyle\sum_i (w_k^i)^{2}\Bigr)^{-1} \in [1, N],
 \end{equation}
 measures how concentrated the weights have become. Resampling fires when
-$\mathrm{ESS} < 0.75N$, an aggressive threshold chosen deliberately, which when tested worked best.
+$N_{\mathrm{eff}} < 0.75N$, an aggressive threshold chosen deliberately, which when tested worked best.
 
 \paragraph{Liu--West kernel resampling $(a = 0.98)$.}
 When the threshold is crossed, each particle is shrunk toward the weighted mean
-$\bar{\omega}$ and jittered with noise:
+$\bar{\xi}$ and jittered with noise:
 \begin{equation}
-\omega_i' = a\,\omega_{\mathrm{idx}(i)} + (1-a)\,\bar{\omega} + \varepsilon_i,
-\qquad \varepsilon_i \sim \mathcal{N}\!\bigl(0,\; h^{2}\Sigma\bigr),
+\xi^i \leftarrow a\,\hat{\xi}^i + (1-a)\,\bar{\xi} + \varepsilon^i,
+\qquad \varepsilon^i \sim \mathcal{N}\!\bigl(0,\; h^{2}\Sigma\bigr),
 \qquad h^{2} = 1 - a^{2},
 \label{eq:liu-west}
 \end{equation}
-where $\Sigma$ is the empirical (weighted) covariance of the particles.
+where $\Sigma$ is the covariance of the particles, weighted by $w_k^i$.
 
 The shrinkage toward the weighted mean exactly cancels the variance added by the
 jitter,
@@ -411,11 +411,11 @@ shared SMC filter and environment.
   \toprule
   method & optimiser & network \\
   \midrule
-  TRPO & trust-region policy optimisation (\texttt{sb3\_\allowbreak{}contrib}) & \texttt{MlpPolicy},
-  $\pi$ and $V$ both \texttt{[256, 256]} \\
-  CEM & cross-entropy method over the flat 545-dim weight vector &
-  \texttt{TimePolicy\_\allowbreak{}Fiderer\_\allowbreak{}16} - one hidden layer of 16,
-  \texttt{Tanh}, sigmoid-squashed output \\
+  TRPO & trust-region policy optimisation (from sb3-contrib) & a multilayer
+  perceptron with two hidden layers of 256 units, used for both the policy and
+  the value function \\
+  CEM & cross-entropy method over the flat 545-dimensional weight vector & one
+  hidden layer of 16 units with tanh activation and a sigmoid-squashed output \\
   \bottomrule
   \end{tabular}
 \end{table}
@@ -425,22 +425,20 @@ clipped in the environment step.
 
 \subsubsection{1. TRPO}
 \label{sec:method-trpo}
-Reads \texttt{[posterior\_\allowbreak{}mean, posterior\_\allowbreak{}var,
-*last\_\allowbreak{}30\_\allowbreak{}interrogation\_\allowbreak{}times]} $\rightarrow$
-\texttt{Box(32,)} and emits an unbounded Gaussian sample of $t$, clipped to $[0.1, 3000]$ in the
-environment step. The $\pi$ and $V$ heads are both \texttt{[256, 256]} MlpPolicy. The optimiser is
-the trust-region policy optimiser from \texttt{sb3\_\allowbreak{}contrib} with
-\texttt{target\_\allowbreak{}kl} $= 10^{-2}$ and $\gamma = 0.99$. TRPO is trained from scratch for
-$10^7$ timesteps.
+The policy reads a 32-dimensional continuous observation, consisting of the posterior mean, the
+posterior variance and the last 30 interrogation times, and emits an unbounded Gaussian sample of
+$t$, which is clipped to $[0.1, 3000]$ in the environment step. Both the policy and the value head
+are multilayer perceptrons with two hidden layers of 256 units. The optimiser is the trust-region
+policy optimiser from \texttt{sb3-contrib}, with a target KL of $10^{-2}$ and $\gamma = 0.99$. TRPO
+is trained from scratch for $10^7$ timesteps.
 
 Training is the standard trust-region loop, one update per rollout batch:
 
 \begin{enumerate}
-  \item Collect experience. The agent plays episodes in \texttt{AdaptiveSMCEnv}. Each episode draws
-  one true frequency, runs \num{100} measurements, observes \texttt{[posterior mean, posterior
-  variance, last 30 interrogation times]} and receives the reward $V_{k-1} - V_k$. \num{2048}
-  environment steps are gathered per update - the \texttt{sb3\_\allowbreak{}contrib} default, left
-  unoverridden here.
+  \item Collect experience. The agent plays episodes in the adaptive SMC environment. Each episode
+  draws one true frequency, runs \num{100} measurements, observes the posterior mean, the posterior
+  variance and the last 30 interrogation times, and receives the reward $V_{k-1} - V_k$. \num{2048}
+  environment steps are gathered per update - the sb3-contrib default, left unoverridden here.
   \item Estimate advantages. Generalised advantage estimation with $\gamma = 0.99$ and $\lambda =
   0.95$ converts the reward sequence into a normalised advantage $\hat A$ for every step, using the
   value head as the baseline.
@@ -459,10 +457,9 @@ Training is the standard trust-region loop, one update per rollout batch:
 
 \subsubsection{2. CEM}
 \label{sec:method-cem}
-A gradient-free cross-entropy method over the flat 545-dim weight vector of
-\texttt{TimePolicy\_\allowbreak{}Fiderer\_\allowbreak{}16} - one hidden layer of 16, \texttt{Tanh},
-sigmoid-squashed output. Population 1000, elite fraction 0.1,
-\texttt{CEM\_\allowbreak{}INIT\_\allowbreak{}STD = 1.\allowbreak{}0}, with 100-step episodes and 2000
+A gradient-free cross-entropy method over the flat 545-dimensional weight vector of a
+single-hidden-layer time policy with 16 units, a tanh activation and a sigmoid-squashed output.
+Population 1000, elite fraction 0.1, initial standard deviation 1.0, with 100-step episodes and 2000
 particles.
 
 Training is a generation loop over that weight vector:
@@ -472,9 +469,9 @@ Training is a generation loop over that weight vector:
   \num{545}-dimensional vector $\theta$, and the search starts from $\mu = 0$ and $\sigma = 1.0$.
   \item Sample a population. Draw \num{1000} candidates $\theta_i \sim \mathcal{N}(\mu, \sigma^2)$.
   \item Score each candidate. Each $\theta_i$ is copied into the network, which maps the observation
-  through \num{16} \texttt{Tanh} units and squashes its output with a sigmoid, $t = t_{\min} +
-  (t_{\max} - t_{\min})\,\sigma(z)$. The candidate's return is the total reward of one full episode
-  played at that generation's true frequency.
+  through \num{16} tanh units and squashes its output with a sigmoid, $t = t_{\min} + (t_{\max} -
+  t_{\min})\,\sigma(z)$. The candidate's return is the total reward of one full episode played at
+  that generation's true frequency.
   \item Select the elite. Rank the \num{1000} candidates by return and keep the best \num{100}
   (elite fraction $0.1$).
   \item Refit the distribution. Set $\mu$ to the elite mean and $\sigma$ to the elite standard
@@ -491,23 +488,20 @@ Training is a generation loop over that weight vector:
 \label{sec:training}
 % ===========================================================================
 TRPO. Training runs for $10^5$ episodes of 100 steps, or $10^7$ timesteps, with \num{10000}
-particles, \texttt{[256, 256]} policy and value networks, and \texttt{target\_\allowbreak{}kl}
-$= 10^{-2}$. Checkpoints are written every \num{50000} timesteps. A partially trained policy can
-then be evaluated at any point, and a crash costs at most one interval.
+particles, policy and value networks of two hidden layers of 256 units each, and a target KL of
+$10^{-2}$. Checkpoints are written every \num{50000} timesteps. A partially trained policy can then
+be evaluated at any point, and a crash costs at most one interval.
 
 TRPO is trained from scratch.
 
-CEM. Training runs for 100 generations at population 1000, elite fraction 0.1, with 2000 particles
-and 100-step episodes, optimising the flat 545-dimensional weight vector of
-\texttt{TimePolicy\_\allowbreak{}Fiderer\_\allowbreak{}16}. This takes about 45 minutes on CPU,
-roughly 27\,s per generation.
+CEM. Training runs for 100 generations at population 1000 and elite fraction 0.1, with 2000
+particles and 100-step episodes, optimising the flat 545-dimensional weight vector of the
+single-hidden-layer time policy of 16 units. This takes about 45 minutes on CPU, roughly 27\,s per
+generation.
 
-Logging. Logged per episode (TRPO) or per generation (CEM): \texttt{mean\_\allowbreak{}reward},
-\texttt{mean\_\allowbreak{}init\_\allowbreak{}var},
-\texttt{mean\_\allowbreak{}final\_\allowbreak{}var}, \texttt{mean\_\allowbreak{}ess},
-\texttt{mean\_\allowbreak{}t}, \texttt{true\_\allowbreak{}omega}. Plus
-\texttt{max\_\allowbreak{}reward}, \texttt{sigma\_\allowbreak{}mean} and
-\texttt{mu\_\allowbreak{}norm} for CEM. Parameters capture the full hyperparameter set.
+Logging. Logged per episode (TRPO) or per generation (CEM): mean reward, mean initial variance, mean
+final variance, mean effective sample size, mean interrogation time and true frequency. Plus maximum
+reward, mean sigma and the norm of $\mu$ for CEM. Parameters capture the full hyperparameter set.
 
 \noindent\rule{\textwidth}{0.4pt}
 \FloatBarrier
