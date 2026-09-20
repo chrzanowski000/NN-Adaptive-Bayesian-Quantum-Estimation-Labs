@@ -152,10 +152,10 @@ I(\omega; t) = \frac{\left(\partial_\omega P\right)^2}{P\,(1-P)}
 
 Without decoherence ($v \to 1$) this reduces to $I = t^2$: information grows quadratically in the
 interrogation time and is independent of $\omega$. With finite $T_2$ the factor $v^2 =
-e^{-2t/T_2}$ supplies the envelope $t^2 e^{-2t/T_2}$, which peaks at $t = T_2$. The corresponding
+e^{-2t/T_2}$ supplies the overall factor $t^2 e^{-2t/T_2}$, which peaks at $t = T_2$. The corresponding
 bound is $I_{\max} \approx e^{-2}T_2^2 = 0.135\,T_2^2$; for $T_2 = 10$ the actual single-shot
 optimum sits at $t^\star \approx 8.4$-$9.5$, weakly $\omega$-dependent. For $t \gg T_2$ the
-envelope decays exponentially and $I \to 0$: a fully dephased measurement returns a fair coin and
+overall factor decays exponentially and $I \to 0$: a fully dephased measurement returns a fair coin and
 carries no information. This is the paper's observation that ``times which exceed $T_2$ tend to
 yield no information, which explains why the Bayes risk saturates''.
 
@@ -163,7 +163,7 @@ Cram\'er--Rao therefore bounds any fixed schedule: with $N$ shots,
 $\mathrm{Var}(\omega) \ge 1/\sum_k I(\omega; t_k)$. Since per-shot information is bounded above,
 the only way to keep improving is to hold the per-shot information near its $t \approx T_2$
 ceiling - which a policy may do only once the posterior has narrowed.
- This is the sanity check Fisher information provides - it is not the objective.
+ This is the cross-check Fisher information provides - it is not the objective.
 
 
 % ---------------------------------------------------------------------------
@@ -184,8 +184,8 @@ A good policy must therefore trade off:
 \subsection{The figure of merit: Bayes risk}
 \label{sec:the-figure-of-merit-bayes-risk}
 % ---------------------------------------------------------------------------
-This is a Bayesian estimation problem, and the quantity everything is judged by is the Bayes risk -
-Fiderer Eq. (1):
+This is a Bayesian estimation problem, and the quantity everything is judged by is the Bayes risk,
+Eq. (1) of the paper:
 
 \begin{equation}
 r\bigl(h \mid p(\theta)\bigr) = \mathbb{E}_{D_k}\bigl[\, \mathrm{tr}\,\mathrm{Cov}(\theta \mid D_k)
@@ -193,7 +193,7 @@ r\bigl(h \mid p(\theta)\bigr) = \mathbb{E}_{D_k}\bigl[\, \mathrm{tr}\,\mathrm{Co
 \label{eq:bayes-risk}
 \end{equation}
 where $h$ is the experiment-design heuristic, $D_k = (d_1,\dots,d_k)$ the measurement record, and
-smaller is better. It is the risk of the quadratic loss $L(\hat\theta_k, \theta) =
+smaller is better. It is the average squared error $L(\hat\theta_k, \theta) =
 \lVert\hat\theta_k - \theta\rVert_2^2$ under the Bayes estimator $\hat\theta_k(D_k) =
 \mathbb{E}[\theta \mid D_k]$. That is, the posterior mean - which is exactly what this
 implementation reports.
@@ -216,14 +216,14 @@ values. So the Bayes risk is precisely the mean final posterior variance.
 
 The paper is explicit that the frequentist route goes ``with the Cram\'er-Rao bound formalism
 by maximizing the quantum Fisher information''. It
-deliberately takes the Bayesian route instead. Fisher information is a useful sanity check here
+deliberately takes the Bayesian route instead. Fisher information is a useful cross-check here
  but it is not the objective.
 
 % ---------------------------------------------------------------------------
 \subsection{The reward}
 \label{sec:the-reward}
 % ---------------------------------------------------------------------------
-The reward is the reduction in traced posterior covariance at each step - Fiderer Eq. (2):
+The reward is the reduction in traced posterior covariance at each step, Eq. (2) of the paper:
 
 \begin{align}
 R(D_k) &= \mathrm{tr}\,\mathrm{Cov}(\theta \mid D_{k-1}) - \mathrm{tr}\,\mathrm{Cov}(\theta \mid
@@ -233,15 +233,15 @@ D_k) \nonumber \\
 \end{align}
 with $V_k = \sum_i w_k^i\,(\xi^i - \bar{\xi})^2$. This is not an arbitrary choice, and it is not a
 weaker substitute for an information-gain reward. The paper's reasoning: the negative Bayes risk is
-the obvious reward but is too slow to compute inside a training loop. Eq. (2) is cheap in the
-SMC framework and telescopes to it. Eq. (3), for $N$ experiments per episode:
+the obvious reward but is too slow to compute inside a training loop. Eq. (2) is easy to compute with the
+particle filter and adds up to it over an episode. Eq. (3) of the paper, for $N$ experiments per episode:
 
 \begin{equation}
 \mathbb{E}_{D_N}\left[\sum_{j=1}^{N} R(D_j)\right] = \mathrm{const} - r\bigl(h \mid p(\theta)\bigr),
 \qquad \mathrm{const} = \mathrm{tr}\,\mathrm{Cov}(\theta).
 \label{eq:telescope}
 \end{equation}
-So maximising the episode return minimises the Bayes risk. The paper additionally sets $\mathrm{tr}\,\mathrm{Cov}(\theta)$ to
+So maximising the sum of rewards in one episode minimises the Bayes risk. The paper additionally sets $\mathrm{tr}\,\mathrm{Cov}(\theta)$ to
 its exact prior value ($1/12$ for $\mathrm{Uniform}(0,1)$) as a numerical constant rather than
 recomputing it from a finite particle sample, so the reward carries no particle-filter noise from
 the first step.
@@ -253,7 +253,7 @@ the first step.
 \section{Parameters}
 \label{sec:configuration}
 % ===========================================================================
-A single shared parameter set backs every comparison.
+The same settings are used for every comparison.
 
 \begin{table}[H]
   \centering
@@ -318,12 +318,12 @@ The effective sample size $N_{\mathrm{eff}}$,
 \begin{equation}
 N_{\mathrm{eff}} = \Bigl(\textstyle\sum_i (w_k^i)^{2}\Bigr)^{-1} \in [1, N],
 \end{equation}
-measures how concentrated the weights have become. Resampling fires when
+measures how concentrated the weights have become. Resampling is applied when
 $N_{\mathrm{eff}} < 0.75N$ - a deliberately aggressive threshold, which performed best in testing.
 
 \paragraph{Liu--West kernel resampling $(a = 0.98)$.}
 When the threshold is crossed, each particle is shrunk toward the weighted mean
-$\bar{\xi}$ and jittered with noise:
+$\bar{\xi}$ and given a random perturbation:
 \begin{equation}
 \xi^i \leftarrow a\,\hat{\xi}^i + (1-a)\,\bar{\xi} + \varepsilon^i,
 \qquad \varepsilon^i \sim \mathcal{N}\!\bigl(0,\; h^{2}\Sigma\bigr),
@@ -390,18 +390,19 @@ shared SMC filter and environment.
   perceptron with two hidden layers of 256 units, used for both the policy and
   the value function \\
   CEM & cross-entropy method over the flat 545-dimensional weight vector & one
-  hidden layer of 16 units with tanh activation and a sigmoid-squashed output \\
+  hidden layer of 16 units with tanh activation, its output bounded to
+  $[t_{\min}, t_{\max}]$ by a sigmoid \\
   \bottomrule
   \end{tabular}
 \end{table}
-The CEM network squashes its output structurally, $t = t_{\min} + (t_{\max}-t_{\min})\,\sigma(z)$,
-so it can never emit an out-of-range time. The TRPO actor is an unbounded Gaussian whose sample is
+The CEM network bounds its output to $[t_{\min}, t_{\max}]$, $t = t_{\min} + (t_{\max}-t_{\min})\,\sigma(z)$,
+so it can never produce an out-of-range time. The TRPO actor is an unbounded Gaussian whose sample is
 clipped in the environment step.
 
 \subsubsection{1. TRPO}
 \label{sec:method-trpo}
 The policy reads a 32-dimensional continuous observation, consisting of the posterior mean, the
-posterior variance and the last 30 interrogation times, and emits an unbounded Gaussian sample of
+posterior variance and the last 30 interrogation times, and outputs a Gaussian sample of
 $t$, which is clipped to $[0.1, 3000]$ in the environment step. Both the policy and the value head
 are multilayer perceptrons with two hidden layers of 256 units. The optimiser is the trust-region
 policy optimiser from \texttt{sb3-contrib}, with a target KL of $10^{-2}$ and $\gamma = 0.99$. TRPO
@@ -415,15 +416,15 @@ Training is the standard trust-region loop, one update per rollout batch:
   variance and the last 30 interrogation times, and receives the reward $V_{k-1} - V_k$. \num{2048}
   environment steps are gathered per update.
   \item Estimate advantages. Generalised advantage estimation with $\gamma = 0.99$ and $\lambda =
-  0.95$ converts the reward sequence into a normalised advantage $\hat A$ for every step, using the
-  value head as the baseline.
-  \item Fit the value function. The critic takes \num{10} gradient steps per update, which lowers
-  the variance of $\hat A$.
+  0.95$ converts the reward sequence into a normalised advantage estimate $\hat A$ for every step,
+  using the value network as the baseline.
+  \item Fit the value function. The value network takes \num{10} gradient steps per update, which
+  lowers the variance of the advantage estimate $\hat A$.
   \item Take a trust-region step. The actor maximises the
   $\mathbb{E}\!\left[\frac{\pi_\theta(a\mid s)}{\pi_{\theta_{\mathrm{old}}}(a\mid s)}\,\hat
   A\right]$ subject to $\mathbb{E}\!\left[D_{\mathrm{KL}}(\pi_{\theta_{\mathrm{old}}} \,\|\,
-  \pi_\theta)\right] \le 10^{-2}$. The search direction is the natural gradient, obtained by
-  conjugate gradients (at most \num{15} iterations, damping $0.1$). A backtracking line search then
+  \pi_\theta)\right] \le 10^{-2}$. The search direction is the direction from the
+  Fisher-information metric, computed as an approximate Newton step. A step-size search then
   shrinks the step by $0.8$ until the KL constraint holds and the surrogate improves. If no such
   step exists, the update is reverted.
   \item Repeat. Steps 1-4 run for $10^5$ episodes ($10^7$ timesteps). The policy used for
@@ -433,7 +434,8 @@ Training is the standard trust-region loop, one update per rollout batch:
 \subsubsection{2. CEM}
 \label{sec:method-cem}
 A gradient-free cross-entropy method over the flat 545-dimensional weight vector of a
-single-hidden-layer time policy with 16 units, a tanh activation and a sigmoid-squashed output.
+single-hidden-layer time policy with 16 units, a tanh activation and an output bounded to
+$[t_{\min}, t_{\max}]$ by a sigmoid.
 Population 1000, elite fraction 0.1, initial standard deviation 1.0, with 100-step episodes and 2000
 particles.
 
@@ -444,10 +446,10 @@ Training is a generation loop over that weight vector:
   \num{545}-dimensional vector $\theta$, and the search starts from $\mu = 0$ and $\sigma = 1.0$.
   \item Sample a population. Draw \num{1000} candidates $\theta_i \sim \mathcal{N}(\mu, \sigma^2)$.
   \item Score each candidate. Each $\theta_i$ is copied into the network, which maps the observation
-  through \num{16} tanh units and squashes its output with a sigmoid, $t = t_{\min} + (t_{\max} -
-  t_{\min})\,\sigma(z)$. The candidate's return is the total reward of one full episode played at
-  that generation's true frequency.
-  \item Select the elite. Rank the \num{1000} candidates by return and keep the best \num{100}
+  through \num{16} tanh units and bounds its output to $[t_{\min}, t_{\max}]$ with a sigmoid,
+  $t = t_{\min} + (t_{\max} - t_{\min})\,\sigma(z)$. The candidate's score is the sum of rewards in
+  one full episode played at that generation's true frequency.
+  \item Select the elite. Rank the \num{1000} candidates by score and keep the best \num{100}
   (elite fraction $0.1$).
   \item Refit the distribution. Set $\mu$ to the elite mean and $\sigma$ to the elite standard
   deviation, so the next generation samples around the better parameters.
@@ -485,8 +487,8 @@ reward, mean sigma and the norm of $\mu$ for CEM. Parameters capture the full hy
 \section{Evaluation}
 \label{sec:evaluation}
 % ===========================================================================
-Both policies are scored through one shared NumPy reference harness, which runs at float64 and
-follows one true frequency at a time. The harness is method-agnostic. The SMC filter, the
+Both policies are scored through one shared NumPy evaluation script, which runs at double precision
+and follows one true frequency at a time. The script is identical for both methods. The SMC filter, the
 measurement model and the scoring code are identical for TRPO and CEM. The only method-specific part
 is the function that maps the posterior summary to the next interrogation time $t$. The procedure
 below is therefore the evaluation of both policies.
@@ -495,10 +497,10 @@ below is therefore the evaluation of both policies.
   \item Draw the test frequencies. Draw $N$ true frequencies $\omega \sim \mathrm{Uniform}(0,1)$
   from a fixed seed. The draw is independent of the training draw.
   \item Initialise the filter. Represent the prior by \num{2000} particles drawn
-  $\mathrm{Uniform}(0,1)$ with uniform weights. This is the belief before the first measurement.
+  $\mathrm{Uniform}(0,1)$ with uniform weights. This is the posterior before the first measurement.
   \item Run one episode. Repeat the following \num{125} times, once per measurement:
   \begin{enumerate}
-    \item Read the belief. Normalise the particle weights, compute the posterior mean and variance
+    \item Read the posterior. Normalise the particle weights, compute the posterior mean and variance
     from them. Assemble the observation the policy sees: the mean, the variance, then the last
     \num{30} chosen interrogation times (all zero before the first step).
     \item Choose the interrogation time. The policy maps that observation to a single $t$, clipped
@@ -557,7 +559,7 @@ Both learned policies were evaluated over \num{10000} frequencies.
 The two methods agree to within 1.7\% ($2.17\times 10^{-3}$ vs $2.14\times 10^{-3}$) despite
 completely different optimisers and very different chosen times. CEM settles on
 interrogation times roughly 1.7$\times$ longer than TRPO's, and never goes below $t = 2.16$, where
-TRPO ranges down to the action floor.
+TRPO ranges down to the lower action bound ($t = 0.1$).
 
 The tie is exactly what the paper reports for this regime. Where the limiting resource is used
 fully - as here, since all 125 shots are always spent - the CEM and TRPO curves almost converge.
@@ -565,7 +567,7 @@ the paper notes TRPO pulls ahead of CEM only when the limiting resource is used 
 A further practical advantage of TRPO is training speed: per episode, its compute cost is about
 $10\times$ lower than CEM's, making it the cheaper of the two to train.
 
-\subsubsection{Posterior collapse}\label{sec:posterior-collapse}
+\subsubsection{Posterior variance during the episode}\label{sec:posterior-collapse}
 Mean posterior variance across all \num{10000} $\omega$, log scale.
 Both curves fall steeply over the first $\approx 30$ steps and then decay steadily.
 \begin{figure}[H]

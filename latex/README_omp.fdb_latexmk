@@ -1,6 +1,5 @@
 # Fdb version 4
-["pdflatex"] 1789945725.53975 "/Users/michalchrzanowski/Documents/programing/NN-Adaptive-Bayesian-Quantum-Estimation-Labs/latex/README_omp.tex" "README_omp.pdf" "README_omp" 1789945726.06542 0
-  "/Users/michalchrzanowski/Documents/programing/NN-Adaptive-Bayesian-Quantum-Estimation-Labs/latex/README_omp.tex" 1789945725.27736 29418 baf0beed6ffc49c5f1778bdd3064bf28 ""
+["pdflatex"] 1789946101.91937 "README_omp.tex" "README_omp.pdf" "README_omp" 1789946102.4416 0
   "/Users/michalchrzanowski/Library/texlive/2026basic/texmf-var/fonts/pk/ljfour/jknappen/ec/ecbx1200.600pk" 1789682948.34434 31928 3462a4a2796f621b26c902ffafb946bb ""
   "/Users/michalchrzanowski/Library/texlive/2026basic/texmf-var/fonts/pk/ljfour/jknappen/ec/ecbx1440.600pk" 1789682947.48808 40112 9cde7da18daf119311ba0e857c8f8f39 ""
   "/Users/michalchrzanowski/Library/texlive/2026basic/texmf-var/fonts/pk/ljfour/jknappen/ec/ecbx1728.600pk" 1789682949.26548 49076 3908681e987ff18a9e1de37b2630dfcd ""
@@ -100,8 +99,8 @@
   "/usr/local/texlive/2026basic/texmf-var/fonts/map/pdftex/updmap/pdftex.map" 1773756261 79187 e3f5941707347d15c1721f52279213a2 ""
   "/usr/local/texlive/2026basic/texmf-var/web2c/pdftex/pdflatex.fmt" 1773756254 2966195 a3d18fadc6b52dcfc2947db9c72d5916 ""
   "/usr/local/texlive/2026basic/texmf.cnf" 1772405582 628 bbc09d6d38872d53c11bb48dc9b14e88 ""
-  "README_omp.aux" 1789945725.98651 6168 b48bcecf739eae68c70115ff681debc1 "pdflatex"
-  "README_omp.tex" 1789945725.27736 29418 baf0beed6ffc49c5f1778bdd3064bf28 ""
+  "README_omp.aux" 1789946102.34769 6187 5c314afe5471b58cc5d40f51a6ce5723 "pdflatex"
+  "README_omp.tex" 1789946089.82038 29671 f732ce3e7359312230271647ccbbaf51 ""
   "figures/cem_predicted_t.png" 1788819691.40037 52139 79877f06b069275e830bc71c9fe95660 ""
   "figures/posterior_variance_over_omega_general.png" 1789916163.10151 45865 1736b26be43dae1db08c520c60dff182 ""
   "figures/trpo_predicted_t.png" 1788819691.40372 69561 49eec6b281e6b39475369407c14fa2d7 ""
