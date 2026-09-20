@@ -1,6 +1,6 @@
 # Fdb version 4
-["pdflatex"] 1789901968.78489 "/Users/michalchrzanowski/Documents/programing/NN-Adaptive-Bayesian-Quantum-Estimation-Labs/latex/README_omp.tex" "README_omp.pdf" "README_omp" 1789901969.4798 0
-  "/Users/michalchrzanowski/Documents/programing/NN-Adaptive-Bayesian-Quantum-Estimation-Labs/latex/README_omp.tex" 1789901967.74656 33966 d8a8a06bce37893cbd7a657be7827637 ""
+["pdflatex"] 1789903470.54114 "/Users/michalchrzanowski/Documents/programing/NN-Adaptive-Bayesian-Quantum-Estimation-Labs/latex/README_omp.tex" "README_omp.pdf" "README_omp" 1789903471.28074 0
+  "/Users/michalchrzanowski/Documents/programing/NN-Adaptive-Bayesian-Quantum-Estimation-Labs/latex/README_omp.tex" 1789903470.30163 33865 dabac2f74b5fb2d7b455dd8b842bf5ee ""
   "/Users/michalchrzanowski/Library/texlive/2026basic/texmf-var/fonts/pk/ljfour/jknappen/ec/ecbx1200.600pk" 1789682948.34434 31928 3462a4a2796f621b26c902ffafb946bb ""
   "/Users/michalchrzanowski/Library/texlive/2026basic/texmf-var/fonts/pk/ljfour/jknappen/ec/ecbx1440.600pk" 1789682947.48808 40112 9cde7da18daf119311ba0e857c8f8f39 ""
   "/Users/michalchrzanowski/Library/texlive/2026basic/texmf-var/fonts/pk/ljfour/jknappen/ec/ecbx1728.600pk" 1789682949.26548 49076 3908681e987ff18a9e1de37b2630dfcd ""
@@ -11,7 +11,6 @@
   "/Users/michalchrzanowski/Library/texlive/2026basic/texmf-var/fonts/pk/ljfour/jknappen/ec/ecrm1440.600pk" 1789682949.57873 34296 8c2480d15e8544c07e53c8651a51562a ""
   "/Users/michalchrzanowski/Library/texlive/2026basic/texmf-var/fonts/pk/ljfour/jknappen/ec/ecrm2074.600pk" 1789682949.89419 53712 aaf075d8c5de5a6b97fe9af1959cb80e ""
   "/Users/michalchrzanowski/Library/texlive/2026basic/texmf-var/fonts/pk/ljfour/jknappen/ec/ecti1200.600pk" 1789682948.64725 39096 9a944a18f8042977a5ebf3dfe0d8690d ""
-  "/Users/michalchrzanowski/Library/texlive/2026basic/texmf-var/fonts/pk/ljfour/jknappen/ec/ectt0800.600pk" 1789683947.68689 15172 8b015e24bae4c105b6355817cf70bf3b ""
   "/Users/michalchrzanowski/Library/texlive/2026basic/texmf-var/fonts/pk/ljfour/jknappen/ec/ectt1000.600pk" 1789683946.82675 20008 9f2398704cd7dd5e94a4f65e94263059 ""
   "/Users/michalchrzanowski/Library/texlive/2026basic/texmf-var/fonts/pk/ljfour/jknappen/ec/ectt1200.600pk" 1789683948.55644 24132 2ffc72f5636b9f68be29614c7aa69170 ""
   "/Users/michalchrzanowski/Library/texlive/2026basic/texmf-var/fonts/pk/ljfour/jknappen/ec/tcrm1200.600pk" 1789682947.73039 14040 3c8ec050137c3c66df3bd4d167c6aa89 ""
@@ -27,7 +26,6 @@
   "/usr/local/texlive/2026basic/texmf-dist/fonts/tfm/jknappen/ec/ecrm1728.tfm" 1136768653 3584 3c76ccb63eda935a68ba65ba9da29f1a ""
   "/usr/local/texlive/2026basic/texmf-dist/fonts/tfm/jknappen/ec/ecrm2074.tfm" 1136768653 3584 8e2870ec7aa9776f59654942b0923f51 ""
   "/usr/local/texlive/2026basic/texmf-dist/fonts/tfm/jknappen/ec/ecti1200.tfm" 1136768653 3072 8b5a64dc91775463bc95e2d818524028 ""
-  "/usr/local/texlive/2026basic/texmf-dist/fonts/tfm/jknappen/ec/ectt0800.tfm" 1136768653 1536 0b0b8ca286de6a006b681926403f35cd ""
   "/usr/local/texlive/2026basic/texmf-dist/fonts/tfm/jknappen/ec/ectt1000.tfm" 1136768653 1536 06717a2b50de47d4087ac0e6cd759455 ""
   "/usr/local/texlive/2026basic/texmf-dist/fonts/tfm/jknappen/ec/ectt1200.tfm" 1136768653 1536 487c9b46984a816c7ed238d0674595c7 ""
   "/usr/local/texlive/2026basic/texmf-dist/fonts/tfm/jknappen/ec/tcrm1200.tfm" 1136768653 1536 74b7293ec3713bb7fdca8dd1bd1f469c ""
@@ -129,9 +127,9 @@
   "/usr/local/texlive/2026basic/texmf-var/fonts/map/pdftex/updmap/pdftex.map" 1773756261 79187 e3f5941707347d15c1721f52279213a2 ""
   "/usr/local/texlive/2026basic/texmf-var/web2c/pdftex/pdflatex.fmt" 1773756254 2966195 a3d18fadc6b52dcfc2947db9c72d5916 ""
   "/usr/local/texlive/2026basic/texmf.cnf" 1772405582 628 bbc09d6d38872d53c11bb48dc9b14e88 ""
-  "README_omp.aux" 1789901969.39764 8066 4f87a31dcf6d2346b7559a3432b69bd9 "pdflatex"
-  "README_omp.out" 1789901969.39843 3294 74ba395e5903215d15e92f3a31b9b349 "pdflatex"
-  "README_omp.tex" 1789901967.74656 33966 d8a8a06bce37893cbd7a657be7827637 ""
+  "README_omp.aux" 1789903471.19285 7956 1dba294cb15094c5b47f09af7d3237db "pdflatex"
+  "README_omp.out" 1789903471.19391 3135 77cd1fcb665323b4b9446d184dd215cd "pdflatex"
+  "README_omp.tex" 1789903470.30163 33865 dabac2f74b5fb2d7b455dd8b842bf5ee ""
   "figures/cem_posterior_variance_over_omega_log.png" 1788819691.39936 37394 702c6c54402f8fb5e2c55a30a88d30b1 ""
   "figures/cem_predicted_t.png" 1788819691.40037 52139 79877f06b069275e830bc71c9fe95660 ""
   "figures/trpo_posterior_variance_over_omega_log.png" 1788819691.4025 37191 65be0ac3c0e4676ce4e9b4f0eb874ba3 ""

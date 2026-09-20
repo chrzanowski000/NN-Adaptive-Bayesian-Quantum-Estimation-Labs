@@ -366,10 +366,10 @@ so the posterior's first two moments are preserved. The particles' locations mov
 resampling, so weakly supported regions lose their over-representation and
 strongly supported regions gain it.
 % ---------------------------------------------------------------------------
-\subsection{The control problem}
+\\subsection{The control problem}
 \label{sec:the-control-problem}
 % ---------------------------------------------------------------------------
-The control problem is framed as a Gymnasium environment, \texttt{AdaptiveSMCEnv}:
+The control problem is framed as a Gymnasium environment:
 
 \begin{table}[H]
   \centering
@@ -378,13 +378,12 @@ The control problem is framed as a Gymnasium environment, \texttt{AdaptiveSMCEnv
   \scriptsize
   \begin{tabular}{ll}
   \toprule
-  observation & \texttt{[posterior\_\allowbreak{}mean, posterior\_\allowbreak{}var,
-  *last\_\allowbreak{}30\_\allowbreak{}interrogation\_\allowbreak{}times]} $\rightarrow$
-  \texttt{Box(32,)} \\
-  action & interrogation time $t$ $\rightarrow$ \texttt{Box(0.\allowbreak{}1, 3000.\allowbreak{}0,
-  (1,))} \\
+  observation & posterior mean, posterior variance, and the last 30 interrogation
+  times, i.e. a 32-dimensional continuous vector \\
+  action & interrogation time $t$, a single continuous value between 0.1 and 3000 \\
   reward & $V_{k-1} - V_k$ \\
-  episode & 100 measurements (training) / 125 (evaluation), one true $\omega$ per episode \\
+  episode & 100 measurements during training, 125 during evaluation, one true
+  $\omega$ per episode \\
   \bottomrule
   \end{tabular}
 \end{table}
