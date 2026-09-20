@@ -43,6 +43,7 @@ Two learned policies are built on the same Gymnasium environment, and are
 evaluated on \num{10000} randomly selected $\omega$.
 TRPO and CEM land in a statistical tie ($2.173\times10^{-3}$ vs $2.137\times10^{-3}$ Bayes risk).
 
+Bellow please find a abbreviations table used in this report that will make it easier to understand:
 \begin{table}[H]
   \centering
   \begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.42\textwidth}
@@ -93,8 +94,7 @@ The system is a single qubit undergoing Ramsey interferometry in the presence of
   \item Apply a $\pi/2$ read-out pulse and measure in the computational basis.
   \item Record the binary outcome $d \in \{0, 1\}$.
 \end{enumerate}
-The qubit is not isolated: transverse noise destroys the coherence $\rho_{01}(t) =
-\rho_{01}(0)\,e^{-t/T_2}e^{-i\omega t}$ on a timescale $T_2$.
+
 
 \noindent\rule{\textwidth}{0.4pt}
 \FloatBarrier
@@ -117,7 +117,7 @@ P(d=0 \mid \omega, t)
   &\equiv \frac{1}{2}\bigl[\, 1 + e^{-t/T_2}\cos(\omega t) \,\bigr],
 \label{eq:likelihood}
 \end{align}
-and $P(d=1) = 1 - P(d=0)$. The two forms are algebraically identical.
+and $P(d=1) = 1 - P(d=0)$. 
 
 The expression reads as a decaying interference fringe:
 
@@ -213,7 +213,7 @@ where $h$ is the experiment-design heuristic, $D_k = (d_1,\dots,d_k)$ the measur
 smaller is better. It is the risk of the quadratic loss $L(\hat\theta_k, \theta) =
 \lVert\hat\theta_k - \theta\rVert_2^2$ under the Bayes estimator $\hat\theta_k(D_k) =
 \mathbb{E}[\theta \mid D_k]$. That is, the posterior mean, which is exactly what this implementation
-reports as \texttt{posterior\_\allowbreak{}mean}.
+reports as posterior mean.
 
 The equivalence to the posterior variance is the law of total expectation. With the Bayes
 estimator $\hat\theta_k(D_k) = \mathbb{E}[\theta \mid D_k]$,
@@ -230,9 +230,7 @@ using Bayes' law to swap the conditioning and the variance-minimising property o
 mean. For a single parameter the trace is the scalar posterior variance.
 
 Here the trace is over a $1\times1$ covariance, and the expectation is averaged over true $\omega$
-values. So the Bayes risk is precisely the mean final posterior variance reported as
-\texttt{final\_\allowbreak{}variance\_\allowbreak{}mean}. They are the same number. The paper's name
-for it is the Bayes risk.
+values. So the Bayes risk is precisely the mean final posterior variance.
 
 The paper is explicit that the \emph{frequentist} route goes ``with the Cram\'er-Rao bound formalism
 by maximizing the quantum Fisher information''. It
@@ -261,8 +259,7 @@ SMC framework \emph{and} telescopes to it. Eq. (3), for $N$ experiments per epis
 \qquad \mathrm{const} = \mathrm{tr}\,\mathrm{Cov}(\theta).
 \label{eq:telescope}
 \end{equation}
-So maximising the episode return provably minimises the Bayes risk, provided the return is
-undiscounted ($\gamma = 1$). The paper additionally sets $\mathrm{tr}\,\mathrm{Cov}(\theta)$ to
+So maximising the episode return minimises the Bayes risk. The paper additionally sets $\mathrm{tr}\,\mathrm{Cov}(\theta)$ to
 its exact prior value ($1/12$ for $\mathrm{Uniform}(0,1)$) as a numerical constant rather than
 recomputing it from a finite particle sample, so the reward carries no particle-filter noise from
 the first step.
