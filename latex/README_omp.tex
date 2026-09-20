@@ -7,10 +7,6 @@
 \usepackage{graphicx}
 \usepackage{subcaption}
 \usepackage{amsmath}
-\usepackage{hyperref}
-\hypersetup{colorlinks=true, linkcolor=blue, urlcolor=blue,
-            pdftitle={NN-Adaptive Bayesian Quantum Estimation},
-            pdfauthor={Michal Chrzanowski}}
 \usepackage{placeins}
 \usepackage{amssymb}
 \usepackage{booktabs}
@@ -35,15 +31,15 @@ This report tests reinforcement-learning algorithms that decide when to measure 
 frequency is learned as precisely as physically possible. The work implements adaptive Bayesian
 experimental design for single-qubit Ramsey frequency estimation. A sequential Monte Carlo filter
 maintains a posterior over the unknown frequency $\omega$, and a policy reads that posterior
-and picks the interrogation time $t$ for the next shot. The measurement outcome then is used to corrects the
-posterior with particle filter, and the cycle repeats. The policy is trained either by reinforcement learning (TRPO) or
+and picks the interrogation time $t$ for the next shot. The measurement outcome then updates the posterior with the particle filter, and the cycle repeats. The policy is trained either by reinforcement learning (TRPO) or
 by a gradient-free evolutionary search (CEM), following Fiderer, Schuff \& Braun,
-\emph{Neural-network heuristics for adaptive Bayesian quantum estimation}.
+Neural-network heuristics for adaptive Bayesian quantum estimation.
 Two learned policies are built on the same Gymnasium environment, and are
 evaluated on \num{10000} randomly selected $\omega$.
-TRPO and CEM land in a statistical tie ($2.173\times10^{-3}$ vs $2.137\times10^{-3}$ Bayes risk).
+TRPO and CEM agree to within 1.7\% ($2.173\times10^{-3}$ vs $2.137\times10^{-3}$ Bayes risk),
+consistent with the results reported in the paper.
 
-Bellow please find a abbreviations table used in this report that will make it easier to understand:
+Below is the table of abbreviations used throughout this report:
 \begin{table}[H]
   \centering
   \begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.42\textwidth}
@@ -67,15 +63,16 @@ Bellow please find a abbreviations table used in this report that will make it e
 \section*{Table of contents}
 % ===========================================================================
 \begin{itemize}
-  \item \hyperref[sec:the-experiment]{The experiment}
-  \item \hyperref[sec:the-physics]{The physics}
-  \item \hyperref[sec:configuration]{Parameters}
-  \item \hyperref[sec:the-methods]{The methods: TRPO and CEM}
-  \item \hyperref[sec:training]{Training}
-  \item \hyperref[sec:evaluation]{Evaluation}
-  \item \hyperref[sec:analysis-of-output-data]{Analysis of output data}
-  \item \hyperref[sec:summary]{Summary}
-  \item \hyperref[sec:literature]{Literature}
+  \item The experiment
+  \item The physics
+  \item Parameters
+  \item The methods: TRPO and CEM
+  \item SMC with Liu--West
+  \item Training
+  \item Evaluation
+  \item Analysis of output data
+  \item Summary
+  \item Literature
 \end{itemize}
 
 \noindent\rule{\textwidth}{0.4pt}
@@ -109,7 +106,7 @@ The system is a single qubit undergoing Ramsey interferometry in the presence of
 \label{sec:the-likelihood}
 % ---------------------------------------------------------------------------
 Solving the Lindblad pure-dephasing master equation and applying the Born rule gives the outcome
-probability
+probability as in  %TODO
 
 \begin{align}
 P(d=0 \mid \omega, t)
@@ -118,9 +115,6 @@ P(d=0 \mid \omega, t)
 \label{eq:likelihood}
 \end{align}
 and $P(d=1) = 1 - P(d=0)$. 
-
-The expression reads as a decaying interference fringe:
-
 \begin{table}[H]
   \centering
   \caption{The likelihood.}
@@ -130,7 +124,7 @@ The expression reads as a decaying interference fringe:
   \toprule
   term & meaning \\
   \midrule
-  $\cos^2(\omega t/2)$ & the Ramsey fringe - this is what carries information about $\omega$ \\
+  $\cos^2(\omega t/2)$ & this is what carries information about $\omega$ \\
   $v(t) = e^{-t/T_2}$ & the visibility, or coherent fraction \\
   $(1-v)/2$ & the fully dephased fraction, which returns a coin flip and tells you nothing \\
   \bottomrule
@@ -139,8 +133,7 @@ The expression reads as a decaying interference fringe:
 As $t \to \infty$ the visibility vanishes, $P(d=0) \to 1/2$, and the measurement becomes pure noise.
 Decoherence therefore imposes a hard ceiling on how long it is worth interrogating.
 
-Both the simulator and the filter's likelihood use this same expression, and $T_2$ is treated as
-exactly known. The model is well-specified: there is no model mismatch and no nuisance parameter.
+
 
 
 % ---------------------------------------------------------------------------
@@ -166,36 +159,26 @@ envelope decays exponentially and $I \to 0$: a fully dephased measurement return
 carries no information. This is the paper's observation that ``times which exceed $T_2$ tend to
 yield no information, which explains why the Bayes risk saturates''.
 
-Cram\'er--Rao therefore bounds any \emph{fixed} schedule: with $N$ shots,
+Cram\'er--Rao therefore bounds any fixed schedule: with $N$ shots,
 $\mathrm{Var}(\omega) \ge 1/\sum_k I(\omega; t_k)$. Since per-shot information is bounded above,
 the only way to keep improving is to hold the per-shot information near its $t \approx T_2$
-ceiling - which a policy may do only once the posterior has narrowed enough that $t \approx T_2$
-no longer aliases. This is the sanity check Fisher information provides; it is not the objective.
+ceiling - which a policy may do only once the posterior has narrowed.
+ This is the sanity check Fisher information provides - it is not the objective.
 
 
 % ---------------------------------------------------------------------------
 \subsection{The competing constraint: phase ambiguity}
 \label{sec:the-competing-constraint-phase-ambiguity}
 % ---------------------------------------------------------------------------
-Fisher information is a \emph{local} quantity, and maximising it is the wrong move while the prior
-is still broad. The likelihood depends on $\omega$ only through $\cos(\omega t)$, which is periodic.
-Over the prior support $\Delta\omega = 1$ the fringe wraps once $t > 2\pi \approx 6.28$: several
-well-separated $\omega$ then produce the same phase. The posterior goes multimodal, and the filter
-cannot resolve the aliases.
-
+Fisher information is a local quantity, and maximising it is the wrong move while the prior
+is still broad.
 A good policy must therefore trade off:
 
 \begin{itemize}
   \item small $t$ - unambiguous, but low information per shot ($I \sim t^2$).
-  \item $t \approx T_2$ - maximum information per shot, but aliases a broad prior.
+  \item $t \approx T_2$ - maximum information per shot, but broad prior.
   \item $t \gg T_2$ - decohered, zero information, strictly wasted.
 \end{itemize}
-The resolution is to grow $t$ \emph{as the posterior narrows}, so the phase spread across the
-posterior, $\sqrt{\mathrm{Var}(\omega)}\,t$, stays near one radian. This is the rule
-$t_k = \mathrm{Var}(\omega \mid D_{k-1})^{-1/2}$ - the inverse posterior standard deviation -
-shown by Ferrie et al.\ to be optimal in the greedy sense in the asymptotic limit $N \to \infty$
-for the no-decoherence problem. It predicts \emph{monotone growth} of the interrogation time as
-the posterior narrows, and it is what a learned policy is expected to discover.
 
 % ---------------------------------------------------------------------------
 \subsection{The figure of merit: Bayes risk}
@@ -212,11 +195,10 @@ r\bigl(h \mid p(\theta)\bigr) = \mathbb{E}_{D_k}\bigl[\, \mathrm{tr}\,\mathrm{Co
 where $h$ is the experiment-design heuristic, $D_k = (d_1,\dots,d_k)$ the measurement record, and
 smaller is better. It is the risk of the quadratic loss $L(\hat\theta_k, \theta) =
 \lVert\hat\theta_k - \theta\rVert_2^2$ under the Bayes estimator $\hat\theta_k(D_k) =
-\mathbb{E}[\theta \mid D_k]$. That is, the posterior mean, which is exactly what this implementation
-reports as posterior mean.
+\mathbb{E}[\theta \mid D_k]$. That is, the posterior mean - which is exactly what this
+implementation reports.
 
-The equivalence to the posterior variance is the law of total expectation. With the Bayes
-estimator $\hat\theta_k(D_k) = \mathbb{E}[\theta \mid D_k]$,
+With the Bayes estimator $\hat\theta_k(D_k) = \mathbb{E}[\theta \mid D_k]$,
 
 \begin{equation}
 r = \mathbb{E}_{\theta}\!\left[\mathbb{E}_{D_k\mid\theta}\!\left[\lVert \hat\theta_k -
@@ -232,10 +214,10 @@ mean. For a single parameter the trace is the scalar posterior variance.
 Here the trace is over a $1\times1$ covariance, and the expectation is averaged over true $\omega$
 values. So the Bayes risk is precisely the mean final posterior variance.
 
-The paper is explicit that the \emph{frequentist} route goes ``with the Cram\'er-Rao bound formalism
+The paper is explicit that the frequentist route goes ``with the Cram\'er-Rao bound formalism
 by maximizing the quantum Fisher information''. It
 deliberately takes the Bayesian route instead. Fisher information is a useful sanity check here
-(\hyperref[sec:aside-why-long-interrogation-times-stop-helping]{above}) but it is not the objective.
+ but it is not the objective.
 
 % ---------------------------------------------------------------------------
 \subsection{The reward}
@@ -246,13 +228,13 @@ The reward is the reduction in traced posterior covariance at each step - Fidere
 \begin{align}
 R(D_k) &= \mathrm{tr}\,\mathrm{Cov}(\theta \mid D_{k-1}) - \mathrm{tr}\,\mathrm{Cov}(\theta \mid
 D_k) \nonumber \\
-       &\xrightarrow{\ d=1\ } V_{k-1} - V_k,
+       &= V_{k-1} - V_k,
 \label{eq:reward}
 \end{align}
-with $V_k = \sum_i w_i(\omega_i - \bar\omega)^2$. This is not an arbitrary choice, and it is not a
+with $V_k = \sum_i w_k^i\,(\xi^i - \bar{\xi})^2$. This is not an arbitrary choice, and it is not a
 weaker substitute for an information-gain reward. The paper's reasoning: the negative Bayes risk is
-the obvious reward but is far too slow to compute inside a training loop. Eq. (2) is cheap in the
-SMC framework \emph{and} telescopes to it. Eq. (3), for $N$ experiments per episode:
+the obvious reward but is too slow to compute inside a training loop. Eq. (2) is cheap in the
+SMC framework and telescopes to it. Eq. (3), for $N$ experiments per episode:
 
 \begin{equation}
 \mathbb{E}_{D_N}\left[\sum_{j=1}^{N} R(D_j)\right] = \mathrm{const} - r\bigl(h \mid p(\theta)\bigr),
@@ -289,7 +271,7 @@ A single shared parameter set backs every comparison.
   true values & drawn from the same $\mathrm{Uniform}(0,1)$ \\
   coherence time & $T_2 = 10$ \\
   control & $t \in [0.1,\ 3000]$ \\
-  particles & $10^4$ train / $2\times10^3$ eval \\
+  particles & \num{2000}, training and evaluation \\
   episode & 100 measurements (training) / 125 (evaluation) \\
   reference evaluation & \num{10000} $\omega$ \\
   \bottomrule
@@ -305,25 +287,22 @@ A single shared parameter set backs every comparison.
 % ===========================================================================
 
 % ---------------------------------------------------------------------------
-\section{SMC with Liu--West}
+\subsection{SMC with Liu--West}
 \label{sec:smc-liu-west}
 
-We estimate a single parameter fixed $\omega$ chosen
-once at the start for every run. Because $\omega$ never evolves.
-Ordinary particle filters
-rely on the parameter \emph{randomly moving} at each step to keep the particles
-spread out. Since $\omega$ is frozen, nothing spreads them so resampling collapses every particle onto a few
+We estimate a single fixed parameter $\omega$, chosen once at the start of every run and never
+evolving. Ordinary particle filters rely on the parameter randomly moving at each step to
+keep the particles spread out. Since $\omega$ is frozen, nothing spreads them so resampling collapses every particle onto a few
 duplicated values.
 Liu--West resampling fixes this by adding random noise to
-each particle while preserving the posterior's first two moments.
+each particle while preserving the posterior's mean and variance.
 
 \paragraph{Particle system.}
 We carry $N$ parameter particles $\{\xi^i\}$ with log-weights $\{\log w_k^i\}$.
 Shapes are \texttt{(N, 1)} / \texttt{(N,)} in the NumPy convention.
 
 \paragraph{Bayes update.}
-Each new observation $y_k$ at step $k$ reweights particles, carried out entirely
-in the log domain:
+Each new observation $y_k$ at step $k$ reweights particles:
 \begin{equation}
 \log w_k^i \leftarrow \log w_k^i
   + \log p(y_k \mid \xi^i)
@@ -331,16 +310,16 @@ in the log domain:
 \label{eq:bayes-update}
 \end{equation}
 Renormalised every step, so the weights always sum to one, and only the
-\emph{weights} change: $\omega$ is a static parameter, so its particle
-\emph{locations} are untouched by the update.
+weights change: $\omega$ is a static parameter, so its particle
+locations are untouched by the update.
 
 \paragraph{Effective sample size.}
-The Kish $N_{\mathrm{eff}}$,
+The effective sample size $N_{\mathrm{eff}}$,
 \begin{equation}
 N_{\mathrm{eff}} = \Bigl(\textstyle\sum_i (w_k^i)^{2}\Bigr)^{-1} \in [1, N],
 \end{equation}
 measures how concentrated the weights have become. Resampling fires when
-$N_{\mathrm{eff}} < 0.75N$, an aggressive threshold chosen deliberately, which when tested worked best.
+$N_{\mathrm{eff}} < 0.75N$ - a deliberately aggressive threshold, which performed best in testing.
 
 \paragraph{Liu--West kernel resampling $(a = 0.98)$.}
 When the threshold is crossed, each particle is shrunk toward the weighted mean
@@ -359,11 +338,10 @@ jitter,
 a^{2}\Sigma + h^{2}\Sigma
   = \bigl(a^{2} + (1-a^{2})\bigr)\Sigma = \Sigma,
 \end{equation}
-so the posterior's first two moments are preserved. The particles' locations move during
-resampling, so weakly supported regions lose their over-representation and
-strongly supported regions gain it.
+so the posterior's mean and variance are preserved. The particles' locations move during
+resampling, so weakly supported particles are removed while strongly supported ones are duplicated.
 % ---------------------------------------------------------------------------
-\\subsection{The control problem}
+\subsection{The control problem}
 \label{sec:the-control-problem}
 % ---------------------------------------------------------------------------
 The control problem is framed as a Gymnasium environment:
@@ -389,11 +367,11 @@ The control problem is framed as a Gymnasium environment:
 \subsection{The two learned policies}
 \label{sec:family-learned}
 % ---------------------------------------------------------------------------
-Two learned policies are implemented:
+Two learned policies are implemented on this environment.
 
-In the paper these are two \emph{stages} of one pipeline - a CEM-trained network seeds TRPO through
+In the paper these are two stages of one pipeline - a CEM-trained network seeds TRPO through
 imitation learning, combined because CEM explores while TRPO optimises. Here they are instead
-trained from scratch and compared head-to-head, so each is a complete, independent method on the
+trained from scratch and compared directly, so each is a complete, independent method on the
 shared SMC filter and environment.
 
 \begin{table}[H]
@@ -435,21 +413,21 @@ Training is the standard trust-region loop, one update per rollout batch:
   \item Collect experience. The agent plays episodes in the adaptive SMC environment. Each episode
   draws one true frequency, runs \num{100} measurements, observes the posterior mean, the posterior
   variance and the last 30 interrogation times, and receives the reward $V_{k-1} - V_k$. \num{2048}
-  environment steps are gathered per update - the sb3-contrib default, left unoverridden here.
+  environment steps are gathered per update.
   \item Estimate advantages. Generalised advantage estimation with $\gamma = 0.99$ and $\lambda =
   0.95$ converts the reward sequence into a normalised advantage $\hat A$ for every step, using the
   value head as the baseline.
   \item Fit the value function. The critic takes \num{10} gradient steps per update, which lowers
   the variance of $\hat A$.
-  \item Take a trust-region step. The actor maximises the surrogate
+  \item Take a trust-region step. The actor maximises the
   $\mathbb{E}\!\left[\frac{\pi_\theta(a\mid s)}{\pi_{\theta_{\mathrm{old}}}(a\mid s)}\,\hat
   A\right]$ subject to $\mathbb{E}\!\left[D_{\mathrm{KL}}(\pi_{\theta_{\mathrm{old}}} \,\|\,
   \pi_\theta)\right] \le 10^{-2}$. The search direction is the natural gradient, obtained by
   conjugate gradients (at most \num{15} iterations, damping $0.1$). A backtracking line search then
   shrinks the step by $0.8$ until the KL constraint holds and the surrogate improves. If no such
   step exists, the update is reverted.
-  \item Repeat. Steps 1-4 run for $10^5$ episodes ($10^7$ timesteps). The shipped policy is the
-  network after the last update.
+  \item Repeat. Steps 1-4 run for $10^5$ episodes ($10^7$ timesteps). The policy used for
+  evaluation is the network after the last update.
 \end{enumerate}
 
 \subsubsection{2. CEM}
@@ -484,16 +462,16 @@ Training is a generation loop over that weight vector:
 \section{Training}
 \label{sec:training}
 % ===========================================================================
-TRPO. Training runs for $10^5$ episodes of 100 steps, or $10^7$ timesteps, with \num{10000}
+TRPO. Training runs for $10^5$ episodes of 100 steps, or $10^7$ timesteps, with \num{2000}
 particles, policy and value networks of two hidden layers of 256 units each, and a target KL of
 $10^{-2}$. Checkpoints are written every \num{50000} timesteps. A partially trained policy can then
-be evaluated at any point, and a crash costs at most one interval.
+be evaluated at any point, and an interrupted run costs at most one interval.
 
 TRPO is trained from scratch.
 
 CEM. Training runs for 100 generations at population 1000 and elite fraction 0.1, with 2000
 particles and 100-step episodes, optimising the flat 545-dimensional weight vector of the
-single-hidden-layer time policy of 16 units. This takes about 45 minutes on CPU, roughly 27\,s per
+single-hidden-layer time policy of 16 units. This takes about 54 minutes on CPU, roughly 32\,s per
 generation.
 
 Logging. Logged per episode (TRPO) or per generation (CEM): mean reward, mean initial variance, mean
@@ -515,8 +493,7 @@ below is therefore the evaluation of both policies.
 
 \begin{enumerate}
   \item Draw the test frequencies. Draw $N$ true frequencies $\omega \sim \mathrm{Uniform}(0,1)$
-  from a fixed seed. The draw is independent of the training draw, so these are genuinely held-out
-  frequencies.
+  from a fixed seed. The draw is independent of the training draw.
   \item Initialise the filter. Represent the prior by \num{2000} particles drawn
   $\mathrm{Uniform}(0,1)$ with uniform weights. This is the belief before the first measurement.
   \item Run one episode. Repeat the following \num{125} times, once per measurement:
@@ -528,7 +505,7 @@ below is therefore the evaluation of both policies.
     to $[0.1, 3000]$.
     \item Simulate the measurement. Draw the binary outcome $d \in \{0,1\}$ from $\Pr(d = 0 \mid
     \omega, t) = e^{-t/T_2}\cos^2(\omega t/2) + (1 - e^{-t/T_2})/2$ with $T_2 = 10$, evaluated at
-    the \emph{true} $\omega$ of the episode.
+    the true $\omega$ of the episode.
     \item Update the posterior. Reweight every particle by the likelihood of the observed outcome
     $d$ at its own $\omega$.
     \item Resample if needed. If the effective sample size falls below $0.75 \times \num{2000} =
@@ -539,16 +516,11 @@ below is therefore the evaluation of both policies.
   frequency.
   \item Average. Average the $N$ final variances. For this single-parameter, experiment-limited
   problem the traced posterior covariance averaged over true $\omega$ is exactly the final posterior
-  variance, so this average \emph{is} the Bayes risk of
-  \hyperref[sec:the-figure-of-merit-bayes-risk]{Eq. (1)}. Lower is better.
+  variance, so this average is the Bayes risk of
+  Eq. (1). Lower is better.
 \end{enumerate}
 
-The validation reported below uses $N = \num{10000}$. The repository's general-purpose evaluator,
-\texttt{pipeline/\allowbreak{}evaluate.\allowbreak{}py}, runs the same procedure over a batched
-Torch rollout with \texttt{--n-omegas} defaulting to \num{2000}.
-
-A GPU is not required. The batched rollout costs roughly 4.4\,ms per 125-step, 2000-particle episode
-on CPU, so a \num{10000}-$\omega$ evaluation takes about a minute.
+The validation reported below uses $N = \num{10000}$ with number of frequencies defaulting to \num{2000}.
 
 \noindent\rule{\textwidth}{0.4pt}
 \FloatBarrier
@@ -559,22 +531,21 @@ on CPU, so a \num{10000}-$\omega$ evaluation takes about a minute.
 % ===========================================================================
 
 % ---------------------------------------------------------------------------
-\subsection{Validation over \texorpdfstring{\num{10000}}{10 000} \texorpdfstring{$\omega$}{omega}}
-\label{sec:validation-over-10-000-omega-the-n-scripts}
+\subsection{Validation over \num{10000} $\omega$}
+\label{sec:validation-over-10000-omega}
 % ---------------------------------------------------------------------------
-Both learned policies were evaluated on the NumPy reference harness over \num{10000} held-out
-frequencies.
+Both learned policies were evaluated over \num{10000} frequencies.
 
 \begin{table}[H]
   \centering
-  \caption{Validation over \num{10000} $\omega$ (the N-scripts).}
-  \label{tab:validation-over-10-000-omega-the-n-scripts}
+  \caption{Validation over \num{10000} $\omega$.}
+  \label{tab:validation-over-10000-omega}
   \scriptsize
   \begin{tabular}{lll}
   \toprule
    & TRPO & CEM \\
   \midrule
-  training & \num{100002} episodes, $10^7$ timesteps, 2 h 24 m & 99 generations $\times$ 1000 pop,
+  training & \num{100000} episodes, $10^7$ timesteps, 2 h 24 m & 100 generations $\times$ 1000 pop,
   54 min \\
   Bayes risk over \num{10000} $\omega$ & $2.173\times 10^{-3}$ & $2.137\times 10^{-3}$ \\
   mean $t$ & 4.00 & 6.67 \\
@@ -583,8 +554,8 @@ frequencies.
   \bottomrule
   \end{tabular}
 \end{table}
-The two methods land in a statistical tie ($2.17\times 10^{-3}$ vs $2.14\times 10^{-3}$, a 2\%
-difference) despite completely different optimisers and very different chosen times. CEM settles on
+The two methods agree to within 1.7\% ($2.17\times 10^{-3}$ vs $2.14\times 10^{-3}$) despite
+completely different optimisers and very different chosen times. CEM settles on
 interrogation times roughly 1.7$\times$ longer than TRPO's, and never goes below $t = 2.16$, where
 TRPO ranges down to the action floor.
 
@@ -595,38 +566,24 @@ A further practical advantage of TRPO is training speed: per episode, its comput
 $10\times$ lower than CEM's, making it the cheaper of the two to train.
 
 \subsubsection{Posterior collapse}\label{sec:posterior-collapse}
-Mean posterior variance across all \num{10000} $\omega$, log scale. 
-Both flatten out well before the 125th measurement. The flattening is the
-information-starved regime of \hyperref[sec:aside-why-long-interrogation-times-stop-helping]{the
-Fisher-information analysis}: per-shot information is capped at the $t \approx T_2$ ceiling
-$I_{\max} \approx 0.135\,T_2^2$, and both policies hold $t$ near a fixed operating point
-($\approx 4$ for TRPO, $\approx 6.7$ for CEM) instead of growing it, so late shots add
-progressively less. What remains is the decoherence-limited floor set by $T_2 = 10$ and
-$N = 125$, not a particle-filter failure as ESS stays near 1960 of 2000.
-
+Mean posterior variance across all \num{10000} $\omega$, log scale.
+Both curves fall steeply over the first $\approx 30$ steps and then decay steadily.
 \begin{figure}[H]
   \centering
-  \begin{subfigure}[t]{0.48\textwidth}
+  \begin{subfigure}[t]{0.7\textwidth}
     \centering
-    \includegraphics[width=\textwidth]{trpo_posterior_variance_over_omega_log}
-    \caption{TRPO}
-    \label{fig:posterior-collapse-trpo}
+    \includegraphics[width=\textwidth]{posterior_variance_over_omega_general}
+    \caption{Posterior variance versus measurement step, averaged over \num{10000} $\omega$, for
+    TRPO and CEM.}
+    \label{fig:posterior-collapse}
   \end{subfigure}\hfill
-  \begin{subfigure}[t]{0.48\textwidth}
-    \centering
-    \includegraphics[width=\textwidth]{cem_posterior_variance_over_omega_log}
-    \caption{CEM}
-    \label{fig:posterior-collapse-cem}
-  \end{subfigure}
-  \caption{Posterior collapse.}
-  \label{fig:posterior-collapse}
 \end{figure}
 
 \subsubsection{Chosen interrogation times}\label{sec:chosen-interrogation-times}
-Bellow are presented interrogation times chosen by the two policies, 
-plotted against the measurement step. The TRPO policy chooses times 
+Below are the interrogation times chosen by the two policies, plotted against the measurement
+step. The TRPO policy chooses times 
 that are generally shorter than those chosen by the CEM policy as 
-TRPO settles around \number{4} while CEM settles around \number{6.7}.
+TRPO settles around \num{4} while CEM settles around \num{6.7}.
 \begin{figure}[H]
   \centering
   \begin{subfigure}[t]{0.48\textwidth}
@@ -652,15 +609,15 @@ TRPO settles around \number{4} while CEM settles around \number{6.7}.
 
 This report tested reinforcement-learning algorithms that decide when to measure a qubit, so that
 its frequency is learned as precisely as physically possible. The work implemented adaptive
-Bayesian experimental design for single-qubit Ramsey frequency estimation. Sequential Monte
-Carlo filter that is used to calcualte posterior for prior. Trained policy is used to select
-interrogation time $t$ for the next shot based on posterior. Next measurement outcome corrects
+Bayesian experimental design for single-qubit Ramsey frequency estimation. A sequential Monte
+Carlo filter maintains the posterior over $\omega$, and the trained policy maps that posterior
+summary to the interrogation time $t$ for the next shot. The next measurement outcome corrects
 the posterior, and the cycle repeats. The policy was trained either by reinforcement learning
 (TRPO) or by a gradient-free evolutionary search (CEM), following Fiderer, Schuff \& Braun,
-\emph{Neural-network heuristics for adaptive Bayesian quantum estimation}. Two learned policies
+Neural-network heuristics for adaptive Bayesian quantum estimation. Two learned policies
 were built on the same Gymnasium environment and evaluated on \num{10000} randomly selected
-$\omega$. TRPO and CEM reach similar performance of ($2.173\times10^{-3}$ vs $2.137\times10^{-3}$
-Bayes risk. The two policies reach this tie by different strategies: the TRPO
+$\omega$. TRPO and CEM reach similar performance ($2.173\times10^{-3}$ vs $2.137\times10^{-3}$
+Bayes risk). The two policies reach this tie by different strategies: the TRPO
 policy chooses times that are generally shorter than those chosen by the CEM policy, settling
 around $t \approx 4$ while CEM settles around $t \approx 6.7$. This tie is consistent with the
 paper, which reports TRPO outperforming CEM only when there is limited compute resource available.
@@ -668,8 +625,8 @@ paper, which reports TRPO outperforming CEM only when there is limited compute r
 \FloatBarrier
 \section{Literature}\label{sec:literature}
 \begin{itemize}
-  \item Fiderer, Schuff \& Braun, \emph{Neural-network heuristics for adaptive Bayesian quantum
-  estimation}, PRX Quantum 2, 020303 (2021) -
+  \item Fiderer, Schuff \& Braun, Neural-network heuristics for adaptive Bayesian quantum
+  estimation, PRX Quantum 2, 020303 (2021)
 \end{itemize}
 
 \end{document}
