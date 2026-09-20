@@ -592,19 +592,10 @@ interrogation times roughly 1.7$\times$ longer than TRPO's, and never goes below
 TRPO ranges down to the action floor.
 
 The tie is exactly what the paper reports for this regime. Where the limiting resource is used
-\emph{fully} - as here, since all 125 shots are always spent - the CEM and TRPO curves coincide;
-the paper notes TRPO pulls ahead of CEM only ``when the limiting resource is used only partly'',
-the time-limited cases this repo does not model. Being experiment-limited, both optimisers solve
-the fully-consumed objective and land together.
-
-The very different time courses follow from how each optimiser credits behaviour. CEM observes
-only the accumulated return of a whole episode - a single scalar per candidate - so it settles on
-a robust, moderate schedule and cannot refine individual actions. TRPO assigns credit to single
-actions through the per-step advantage and value function, so it keeps tuning late actions long
-after CEM has frozen. The paper states this division directly: CEM explores the policy space,
-TRPO optimises it further, because CEM ``takes into account only the accumulated reward of full
-episodes'' while RL ``uses all the training data consisting of actions with corresponding
-observations and rewards''.
+fully - as here, since all 125 shots are always spent - the CEM and TRPO curves coincide.
+the paper notes TRPO pulls ahead of CEM only when the limiting resource is used only partly.
+A further practical advantage of TRPO is training speed: per episode, its compute cost is about
+$10\times$ lower than CEM's, making it the cheaper of the two to train.
 
 \subsubsection{Posterior collapse}\label{sec:posterior-collapse}
 Mean posterior variance across all \num{10000} $\omega$, log scale. Both fall about 1.6 decades
