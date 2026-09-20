@@ -136,14 +136,8 @@ INPUT /usr/local/texlive/2026basic/texmf-dist/tex/latex/epstopdf-pkg/epstopdf-ba
 INPUT /usr/local/texlive/2026basic/texmf-dist/tex/latex/latexconfig/epstopdf-sys.cfg
 INPUT /usr/local/texlive/2026basic/texmf-dist/tex/latex/latexconfig/epstopdf-sys.cfg
 INPUT /usr/local/texlive/2026basic/texmf-dist/tex/latex/latexconfig/epstopdf-sys.cfg
-INPUT ./README_omp.out
-INPUT ./README_omp.out
-INPUT README_omp.out
-INPUT README_omp.out
-OUTPUT README_omp.pdf
-INPUT ./README_omp.out
-INPUT ./README_omp.out
 OUTPUT README_omp.out
+OUTPUT README_omp.pdf
 INPUT /usr/local/texlive/2026basic/texmf-dist/tex/generic/babel/locale/en/babel-en-US.ini
 INPUT /usr/local/texlive/2026basic/texmf-dist/tex/generic/babel/locale/en/babel-en-US.ini
 INPUT /usr/local/texlive/2026basic/texmf-dist/fonts/tfm/jknappen/ec/ecrm2074.tfm

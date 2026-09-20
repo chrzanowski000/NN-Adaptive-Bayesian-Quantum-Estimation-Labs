@@ -592,20 +592,20 @@ interrogation times roughly 1.7$\times$ longer than TRPO's, and never goes below
 TRPO ranges down to the action floor.
 
 The tie is exactly what the paper reports for this regime. Where the limiting resource is used
-fully - as here, since all 125 shots are always spent - the CEM and TRPO curves coincide.
+fully - as here, since all 125 shots are always spent - the CEM and TRPO curves almost converge.
 the paper notes TRPO pulls ahead of CEM only when the limiting resource is used only partly.
 A further practical advantage of TRPO is training speed: per episode, its compute cost is about
 $10\times$ lower than CEM's, making it the cheaper of the two to train.
 
 \subsubsection{Posterior collapse}\label{sec:posterior-collapse}
-Mean posterior variance across all \num{10000} $\omega$, log scale. Both fall about 1.6 decades
-from the prior's 0.0833 and flatten out well before the 125th measurement. The flattening is the
+Mean posterior variance across all \num{10000} $\omega$, log scale. 
+Both flatten out well before the 125th measurement. The flattening is the
 information-starved regime of \hyperref[sec:aside-why-long-interrogation-times-stop-helping]{the
 Fisher-information analysis}: per-shot information is capped at the $t \approx T_2$ ceiling
 $I_{\max} \approx 0.135\,T_2^2$, and both policies hold $t$ near a fixed operating point
 ($\approx 4$ for TRPO, $\approx 6.7$ for CEM) instead of growing it, so late shots add
 progressively less. What remains is the decoherence-limited floor set by $T_2 = 10$ and
-$N = 125$, not a particle-filter failure - ESS stays near 1960 of 2000.
+$N = 125$, not a particle-filter failure as ESS stays near 1960 of 2000.
 
 \begin{figure}[H]
   \centering
@@ -626,13 +626,10 @@ $N = 125$, not a particle-filter failure - ESS stays near 1960 of 2000.
 \end{figure}
 
 \subsubsection{Chosen interrogation times}\label{sec:chosen-interrogation-times}
-As the posterior narrows, an optimal adaptive schedule should \emph{grow} $t$ as the inverse
-standard deviation (\hyperref[sec:the-competing-constraint-phase-ambiguity]{above}). Neither policy
-does. TRPO oscillates hard between roughly $1$ and $7$, spiking to $\sim$10 in the opening
-measurements and never settling. CEM is smoother and biased higher, never descending below its
-$t = 2.16$ floor. Both oscillate around a fixed operating point rather than sweeping upward -
-consistent with the fixed-$t$ regime the posterior-collapse flattening implies.
-
+Bellow are presented interrogation times chosen by the two policies, 
+plotted against the measurement step. The TRPO policy chooses times 
+that are generally shorter than those chosen by the CEM policy as 
+TRPO settles around \number{4} while CEM settles around \number{6.7}.
 \begin{figure}[H]
   \centering
   \begin{subfigure}[t]{0.48\textwidth}
@@ -655,18 +652,21 @@ consistent with the fixed-$t$ regime the posterior-collapse flattening implies.
 \noindent\rule{\textwidth}{0.4pt}
 \FloatBarrier
 \section{Summary}\label{sec:summary}
-The physics and the estimation machinery are in place and behave. The likelihood, the Bayes-risk
-figure of merit, the variance-reduction reward and its telescoping identity all match the paper
-equation by equation. The particle filter is healthy - ESS stays at $\sim$1900-1960 of 2000 and is
-not the bottleneck.
 
-Trained TRPO and CEM policies land in a statistical tie over \num{10000} held-out frequencies, at
-$2.173\times10^{-3}$ and $2.137\times10^{-3}$ Bayes risk respectively. For both, the posterior
-variance falls about 1.6 decades from the prior's 0.0833 and flattens out well before the 125th
-measurement. CEM settles on interrogation times roughly 1.7$\times$ longer than TRPO's and never
-goes below $t = 2.16$, where TRPO ranges down to the action floor. Neither policy shows the monotone
-growth in $t$ that an optimal adaptive schedule should produce as the posterior narrows.
-
+This report tested reinforcement-learning algorithms that decide when to measure a qubit, so that
+its frequency is learned as precisely as physically possible. The work implemented adaptive
+Bayesian experimental design for single-qubit Ramsey frequency estimation. Sequential Monte
+Carlo filter that is used to calcualte posterior for prior. Trained policy is used to select
+interrogation time $t$ for the next shot based on posterior. Next measurement outcome corrects
+the posterior, and the cycle repeats. The policy was trained either by reinforcement learning
+(TRPO) or by a gradient-free evolutionary search (CEM), following Fiderer, Schuff \& Braun,
+\emph{Neural-network heuristics for adaptive Bayesian quantum estimation}. Two learned policies
+were built on the same Gymnasium environment and evaluated on \num{10000} randomly selected
+$\omega$. TRPO and CEM reach similar performance of ($2.173\times10^{-3}$ vs $2.137\times10^{-3}$
+Bayes risk. The two policies reach this tie by different strategies: the TRPO
+policy chooses times that are generally shorter than those chosen by the CEM policy, settling
+around $t \approx 4$ while CEM settles around $t \approx 6.7$. This tie is consistent with the
+paper, which reports TRPO outperforming CEM only when there is limited compute resource available.
 \noindent\rule{\textwidth}{0.4pt}
 \FloatBarrier
 \section{Literature}\label{sec:literature}

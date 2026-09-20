@@ -1,6 +1,6 @@
 # Fdb version 4
-["pdflatex"] 1789905194.0584 "/Users/michalchrzanowski/Documents/programing/NN-Adaptive-Bayesian-Quantum-Estimation-Labs/latex/README_omp.tex" "README_omp.pdf" "README_omp" 1789905194.80689 0
-  "/Users/michalchrzanowski/Documents/programing/NN-Adaptive-Bayesian-Quantum-Estimation-Labs/latex/README_omp.tex" 1789905193.79822 32921 05085033e18d67cc8f05031e5b8fea03 ""
+["pdflatex"] 1789906618.87205 "/Users/michalchrzanowski/Documents/programing/NN-Adaptive-Bayesian-Quantum-Estimation-Labs/latex/README_omp.tex" "README_omp.pdf" "README_omp" 1789906619.58743 2
+  "/Users/michalchrzanowski/Documents/programing/NN-Adaptive-Bayesian-Quantum-Estimation-Labs/latex/README_omp.tex" 1789906617.63989 33020 4cb421fcb8c76c4b392c905466664d90 ""
   "/Users/michalchrzanowski/Library/texlive/2026basic/texmf-var/fonts/pk/ljfour/jknappen/ec/ecbx1200.600pk" 1789682948.34434 31928 3462a4a2796f621b26c902ffafb946bb ""
   "/Users/michalchrzanowski/Library/texlive/2026basic/texmf-var/fonts/pk/ljfour/jknappen/ec/ecbx1440.600pk" 1789682947.48808 40112 9cde7da18daf119311ba0e857c8f8f39 ""
   "/Users/michalchrzanowski/Library/texlive/2026basic/texmf-var/fonts/pk/ljfour/jknappen/ec/ecbx1728.600pk" 1789682949.26548 49076 3908681e987ff18a9e1de37b2630dfcd ""
@@ -125,9 +125,9 @@
   "/usr/local/texlive/2026basic/texmf-var/fonts/map/pdftex/updmap/pdftex.map" 1773756261 79187 e3f5941707347d15c1721f52279213a2 ""
   "/usr/local/texlive/2026basic/texmf-var/web2c/pdftex/pdflatex.fmt" 1773756254 2966195 a3d18fadc6b52dcfc2947db9c72d5916 ""
   "/usr/local/texlive/2026basic/texmf.cnf" 1772405582 628 bbc09d6d38872d53c11bb48dc9b14e88 ""
-  "README_omp.aux" 1789905194.72267 7956 1dba294cb15094c5b47f09af7d3237db "pdflatex"
-  "README_omp.out" 1789905194.72364 3135 77cd1fcb665323b4b9446d184dd215cd "pdflatex"
-  "README_omp.tex" 1789905193.79822 32921 05085033e18d67cc8f05031e5b8fea03 ""
+  "README_omp.aux" 1789906619.48834 7956 de554afea3f84d1e1dd51da251ab4848 "pdflatex"
+  "README_omp.out" 1789906619.48919 3135 77cd1fcb665323b4b9446d184dd215cd "pdflatex"
+  "README_omp.tex" 1789906617.63989 33020 4cb421fcb8c76c4b392c905466664d90 ""
   "figures/cem_posterior_variance_over_omega_log.png" 1788819691.39936 37394 702c6c54402f8fb5e2c55a30a88d30b1 ""
   "figures/cem_predicted_t.png" 1788819691.40037 52139 79877f06b069275e830bc71c9fe95660 ""
   "figures/trpo_posterior_variance_over_omega_log.png" 1788819691.4025 37191 65be0ac3c0e4676ce4e9b4f0eb874ba3 ""
